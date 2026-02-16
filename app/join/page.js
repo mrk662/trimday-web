@@ -6,21 +6,12 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnon) {
-  // This will show in console if env vars are missing on Netlify
-  console.error(
-    "Missing Supabase env vars. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Netlify."
-  );
-}
-
 const supabase = createClient(supabaseUrl || "", supabaseAnon || "");
 
 const STRIPE_LINK = "https://buy.stripe.com/dRm8wPadhg4McEFf67gUM03";
 
-// Use browser crypto UUID (modern browsers)
 const makeId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  // fallback (rare)
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -28,10 +19,16 @@ const makeId = () => {
   });
 };
 
-// Helps avoid common WhatsApp mistakes for UK (+44)
+const slugify = (str) =>
+  String(str || "")
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 const normalizeUkMobile = (input) => {
   const digits = String(input || "").replace(/\D/g, "");
-  // remove leading 0 if user typed it (e.g. 077xx -> 77xx)
   return digits.startsWith("0") ? digits.slice(1) : digits;
 };
 
@@ -39,7 +36,6 @@ export default function JoinPlatform() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Form state
   const [shopName, setShopName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [address, setAddress] = useState("");
@@ -64,16 +60,17 @@ export default function JoinPlatform() {
     setLoading(true);
 
     try {
-      // ✅ generate ID client-side so we can pass it to Stripe without needing SELECT
       const shopId = makeId();
 
-      // ✅ IMPORTANT: with RLS, do NOT select/return inserted rows from the browser.
-      // This avoids PostgREST trying to read back the row (which can fail under RLS).
+      const baseSlug = slugify(name);
+      const slug = `${baseSlug}-${shopId.slice(0, 8)}`; // ✅ unique
+
       const { error } = await supabase.from("shops").insert(
         [
           {
-            id: shopId, // ✅ requires shops.id = uuid (default)
+            id: shopId,
             name,
+            slug, // ✅ FIX for NOT NULL slug
             address: addr,
             whatsapp_number: phone,
             shop_photo_url: photo,
@@ -86,25 +83,18 @@ export default function JoinPlatform() {
 
       if (error) {
         console.error("Supabase insert error:", error);
-
-        // A bit more useful feedback than the generic alert
-        const msg =
-          error?.message ||
-          "Insert failed. Check Supabase RLS policy + required columns/defaults.";
-        alert(`Failed to save shop.\n\n${msg}`);
+        alert(`Failed to save shop.\n\n${error.message || "Unknown error"}`);
         setLoading(false);
         return;
       }
 
       setCreatedShopId(shopId);
 
-      // 2) Send barber to Stripe Payment Link with shopId included
-      // Stripe Payment Links accept client_reference_id on checkout session
       const url = `${STRIPE_LINK}?client_reference_id=${encodeURIComponent(shopId)}`;
       window.location.href = url;
     } catch (err) {
       console.error("Unexpected error:", err);
-      alert("Failed to save shop. Check Supabase RLS policies for INSERT.");
+      alert("Failed to save shop. Please try again.");
       setLoading(false);
     }
   };
@@ -112,14 +102,11 @@ export default function JoinPlatform() {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center py-20 px-4">
       <div className="max-w-xl w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
-        {/* Progress Bar */}
         <div className="flex gap-2 mb-8">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className={`h-2 flex-1 rounded-full ${
-                step >= i ? "bg-blue-600" : "bg-slate-100"
-              }`}
+              className={`h-2 flex-1 rounded-full ${step >= i ? "bg-blue-600" : "bg-slate-100"}`}
             />
           ))}
         </div>
@@ -141,9 +128,7 @@ export default function JoinPlatform() {
               />
 
               <div className="flex gap-2">
-                <div className="bg-slate-100 p-4 rounded-2xl text-slate-700 font-bold">
-                  +44
-                </div>
+                <div className="bg-slate-100 p-4 rounded-2xl text-slate-700 font-bold">+44</div>
                 <input
                   type="text"
                   value={whatsappNumber}
@@ -250,9 +235,7 @@ export default function JoinPlatform() {
               After payment, your shop will go live automatically once the payment is confirmed.
             </p>
 
-            {createdShopId && (
-              <p className="text-[10px] text-slate-400 mt-2">Ref: {createdShopId}</p>
-            )}
+            {createdShopId && <p className="text-[10px] text-slate-400 mt-2">Ref: {createdShopId}</p>}
           </div>
         )}
       </div>
