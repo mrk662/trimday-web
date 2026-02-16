@@ -3,10 +3,17 @@ import React, { useState } from "react";
 import { Camera, CreditCard, CheckCircle } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnon) {
+  // This will show in console if env vars are missing on Netlify
+  console.error(
+    "Missing Supabase env vars. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Netlify."
+  );
+}
+
+const supabase = createClient(supabaseUrl || "", supabaseAnon || "");
 
 const STRIPE_LINK = "https://buy.stripe.com/dRm8wPadhg4McEFf67gUM03";
 
@@ -21,6 +28,13 @@ const makeId = () => {
   });
 };
 
+// Helps avoid common WhatsApp mistakes for UK (+44)
+const normalizeUkMobile = (input) => {
+  const digits = String(input || "").replace(/\D/g, "");
+  // remove leading 0 if user typed it (e.g. 077xx -> 77xx)
+  return digits.startsWith("0") ? digits.slice(1) : digits;
+};
+
 export default function JoinPlatform() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -33,8 +47,16 @@ export default function JoinPlatform() {
 
   const [createdShopId, setCreatedShopId] = useState(null);
 
+  const canGoStep2 = shopName.trim().length > 1 && normalizeUkMobile(whatsappNumber).length >= 9;
+  const canGoStep3 = address.trim().length > 10;
+
   const handleGoToPayment = async () => {
-    if (!shopName || !whatsappNumber || !address) {
+    const name = shopName.trim();
+    const phone = normalizeUkMobile(whatsappNumber);
+    const addr = address.trim();
+    const photo = shopPhotoUrl?.trim() ? shopPhotoUrl.trim() : null;
+
+    if (!name || !phone || !addr) {
       alert("Please fill Shop Name, WhatsApp Number, and Address.");
       return;
     }
@@ -45,34 +67,43 @@ export default function JoinPlatform() {
       // ✅ generate ID client-side so we can pass it to Stripe without needing SELECT
       const shopId = makeId();
 
-      // 1) Create shop row in Supabase as PENDING (NO readback)
-      const { error } = await supabase
-        .from("shops")
-        .insert(
-          [
-            {
-              id: shopId, // ✅ IMPORTANT: requires shops.id to be UUID type (it is, by default)
-              name: shopName.trim(),
-              address: address.trim(),
-              whatsapp_number: whatsappNumber.trim(),
-              shop_photo_url: shopPhotoUrl?.trim() ? shopPhotoUrl.trim() : null,
-              is_active: false,
-              subscription_status: "pending",
-            },
-          ],
-          { returning: "minimal" } // ✅ IMPORTANT: prevents SELECT-after-insert
-        );
+      // ✅ IMPORTANT: with RLS, do NOT select/return inserted rows from the browser.
+      // This avoids PostgREST trying to read back the row (which can fail under RLS).
+      const { error } = await supabase.from("shops").insert(
+        [
+          {
+            id: shopId, // ✅ requires shops.id = uuid (default)
+            name,
+            address: addr,
+            whatsapp_number: phone,
+            shop_photo_url: photo,
+            is_active: false,
+            subscription_status: "pending",
+          },
+        ],
+        { returning: "minimal" }
+      );
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+
+        // A bit more useful feedback than the generic alert
+        const msg =
+          error?.message ||
+          "Insert failed. Check Supabase RLS policy + required columns/defaults.";
+        alert(`Failed to save shop.\n\n${msg}`);
+        setLoading(false);
+        return;
+      }
 
       setCreatedShopId(shopId);
 
       // 2) Send barber to Stripe Payment Link with shopId included
-      // Stripe Payment Links support client_reference_id
+      // Stripe Payment Links accept client_reference_id on checkout session
       const url = `${STRIPE_LINK}?client_reference_id=${encodeURIComponent(shopId)}`;
       window.location.href = url;
     } catch (err) {
-      console.error(err);
+      console.error("Unexpected error:", err);
       alert("Failed to save shop. Check Supabase RLS policies for INSERT.");
       setLoading(false);
     }
@@ -124,7 +155,8 @@ export default function JoinPlatform() {
 
               <button
                 onClick={() => setStep(2)}
-                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform"
+                disabled={!canGoStep2}
+                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:hover:scale-100"
               >
                 Next: Shop Details
               </button>
@@ -136,7 +168,7 @@ export default function JoinPlatform() {
           <div className="space-y-6">
             <h2 className="text-3xl font-black text-black">Shop identity.</h2>
             <p className="text-slate-600 font-medium">
-              Add your address and optional photo URL (you’ll add storage later).
+              Add your address and optional photo URL (storage can come later).
             </p>
 
             <div className="space-y-4">
@@ -167,7 +199,8 @@ export default function JoinPlatform() {
 
               <button
                 onClick={() => setStep(3)}
-                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg"
+                disabled={!canGoStep3}
+                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg disabled:opacity-50"
               >
                 Continue to Payment
               </button>
@@ -217,11 +250,8 @@ export default function JoinPlatform() {
               After payment, your shop will go live automatically once the payment is confirmed.
             </p>
 
-            {/* optional debug */}
             {createdShopId && (
-              <p className="text-[10px] text-slate-400 mt-2">
-                Ref: {createdShopId}
-              </p>
+              <p className="text-[10px] text-slate-400 mt-2">Ref: {createdShopId}</p>
             )}
           </div>
         )}
