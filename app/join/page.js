@@ -1,32 +1,114 @@
 "use client";
-import React, { useState } from 'react';
-import { Scissors, Camera, Phone, MapPin, CreditCard, CheckCircle } from 'lucide-react';
+import React, { useState } from "react";
+import { Camera, CreditCard, CheckCircle } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+const STRIPE_LINK = "https://buy.stripe.com/dRm8wPadhg4McEFf67gUM03";
 
 export default function JoinPlatform() {
   const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+
+  // Form state
+  const [shopName, setShopName] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [address, setAddress] = useState("");
+  const [shopPhotoUrl, setShopPhotoUrl] = useState("");
+
+  const [createdShopId, setCreatedShopId] = useState(null);
+
+  const handleGoToPayment = async () => {
+    if (!shopName || !whatsappNumber || !address) {
+      alert("Please fill Shop Name, WhatsApp Number, and Address.");
+      return;
+    }
+
+    setLoading(true);
+
+    // 1) Create shop row in Supabase as PENDING
+    const { data, error } = await supabase
+      .from("shops")
+      .insert([
+        {
+          name: shopName,
+          address,
+          whatsapp_number: whatsappNumber,
+          shop_photo_url: shopPhotoUrl || null,
+          is_active: false,
+          subscription_status: "pending",
+        },
+      ])
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(error);
+      alert("Failed to save shop. Check Supabase RLS policies for INSERT.");
+      setLoading(false);
+      return;
+    }
+
+    const shopId = data.id;
+    setCreatedShopId(shopId);
+
+    // 2) Send barber to Stripe Payment Link with the shopId included
+    const url = `${STRIPE_LINK}?client_reference_id=${encodeURIComponent(shopId)}`;
+    window.location.href = url;
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center py-20 px-4">
+    <div className="min-h-screen bg-white flex flex-col items-center py-20 px-4">
       <div className="max-w-xl w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
-        
         {/* Progress Bar */}
         <div className="flex gap-2 mb-8">
           {[1, 2, 3].map((i) => (
-            <div key={i} className={`h-2 flex-1 rounded-full ${step >= i ? 'bg-blue-600' : 'bg-slate-100'}`} />
+            <div
+              key={i}
+              className={`h-2 flex-1 rounded-full ${
+                step >= i ? "bg-blue-600" : "bg-slate-100"
+              }`}
+            />
           ))}
         </div>
 
         {step === 1 && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-black text-slate-900">List your shop.</h2>
-            <p className="text-slate-500 font-medium">Be the first barber people see when they need a trim in your area.</p>
+            <h2 className="text-3xl font-black text-black">List your shop.</h2>
+            <p className="text-slate-600 font-medium">
+              Be the first barber people see when they need a trim in your area.
+            </p>
+
             <div className="space-y-4 pt-4">
-              <input type="text" placeholder="Shop Name" className="w-full p-4 rounded-2xl border bg-slate-50 outline-none focus:ring-2 ring-blue-500" />
+              <input
+                type="text"
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                placeholder="Shop Name"
+                className="w-full p-4 rounded-2xl border bg-slate-50 outline-none focus:ring-2 ring-blue-500 text-black"
+              />
+
               <div className="flex gap-2">
-                <div className="bg-slate-100 p-4 rounded-2xl text-slate-500 font-bold">+44</div>
-                <input type="text" placeholder="WhatsApp Number" className="flex-1 p-4 rounded-2xl border bg-slate-50 outline-none focus:ring-2 ring-blue-500" />
+                <div className="bg-slate-100 p-4 rounded-2xl text-slate-700 font-bold">
+                  +44
+                </div>
+                <input
+                  type="text"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  placeholder="WhatsApp Number (no leading 0)"
+                  className="flex-1 p-4 rounded-2xl border bg-slate-50 outline-none focus:ring-2 ring-blue-500 text-black"
+                />
               </div>
-              <button onClick={() => setStep(2)} className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">
+
+              <button
+                onClick={() => setStep(2)}
+                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform"
+              >
                 Next: Shop Details
               </button>
             </div>
@@ -35,14 +117,41 @@ export default function JoinPlatform() {
 
         {step === 2 && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-black text-slate-900">Shop Identity.</h2>
+            <h2 className="text-3xl font-black text-black">Shop identity.</h2>
+            <p className="text-slate-600 font-medium">
+              Add your address and optional photo URL (you’ll add storage later).
+            </p>
+
             <div className="space-y-4">
-              <div className="aspect-video border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 cursor-pointer">
-                <Camera className="w-10 h-10 mb-2" />
-                <p className="text-sm font-bold">Upload Shop Front Photo</p>
+              <div className="rounded-3xl p-5 bg-slate-50 border border-slate-100">
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Shop Photo URL (optional)
+                </label>
+                <div className="flex gap-3 items-center">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-3">
+                    <Camera className="w-6 h-6 text-slate-500" />
+                  </div>
+                  <input
+                    type="text"
+                    value={shopPhotoUrl}
+                    onChange={(e) => setShopPhotoUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 p-4 rounded-2xl border bg-white outline-none focus:ring-2 ring-blue-500 text-black"
+                  />
+                </div>
               </div>
-              <textarea placeholder="Full Shop Address & Postcode" className="w-full p-4 rounded-2xl border bg-slate-50 h-32 outline-none focus:ring-2 ring-blue-500" />
-              <button onClick={() => setStep(3)} className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg">
+
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Full Shop Address & Postcode"
+                className="w-full p-4 rounded-2xl border bg-slate-50 h-32 outline-none focus:ring-2 ring-blue-500 text-black"
+              />
+
+              <button
+                onClick={() => setStep(3)}
+                className="w-full bg-black text-white font-bold py-5 rounded-2xl shadow-lg"
+              >
                 Continue to Payment
               </button>
             </div>
@@ -54,24 +163,42 @@ export default function JoinPlatform() {
             <div className="bg-blue-50 text-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <CreditCard className="w-8 h-8" />
             </div>
-            <h2 className="text-3xl font-black text-slate-900">Secure your spot.</h2>
-            <div className="bg-slate-50 p-6 rounded-3xl text-left">
+
+            <h2 className="text-3xl font-black text-black">Secure your spot.</h2>
+
+            <div className="bg-slate-50 p-6 rounded-3xl text-left border border-slate-100">
               <div className="flex justify-between items-center mb-4">
-                <span className="font-bold text-slate-600">Monthly Plan</span>
-                <span className="text-2xl font-black">£20.00</span>
+                <span className="font-bold text-slate-700">Monthly Plan</span>
+                <span className="text-2xl font-black text-black">£20.00</span>
               </div>
+
               <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-slate-600"><CheckCircle className="w-4 h-4 text-green-500" /> Live Status Toggle</li>
-                <li className="flex items-center gap-2 text-sm text-slate-600"><CheckCircle className="w-4 h-4 text-green-500" /> WhatsApp Direct Messaging</li>
-                <li className="flex items-center gap-2 text-sm text-slate-600"><CheckCircle className="w-4 h-4 text-green-500" /> Rank #1 in your Town</li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  Live barber “on duty” toggle
+                </li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  WhatsApp direct bookings
+                </li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  Ranked near the top in your area
+                </li>
               </ul>
             </div>
-            <button 
-              onClick={() => window.location.href = 'YOUR_STRIPE_LINK'} 
-              className="w-full bg-blue-600 text-white font-bold py-5 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all"
+
+            <button
+              onClick={handleGoToPayment}
+              disabled={loading}
+              className="w-full bg-blue-600 text-white font-bold py-5 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-60"
             >
-              Start Subscription
+              {loading ? "Redirecting..." : "Start Subscription"}
             </button>
+
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              After payment, your shop will go live automatically once the payment is confirmed.
+            </p>
           </div>
         )}
       </div>
