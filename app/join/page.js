@@ -10,6 +10,17 @@ const supabase = createClient(
 
 const STRIPE_LINK = "https://buy.stripe.com/dRm8wPadhg4McEFf67gUM03";
 
+// Use browser crypto UUID (modern browsers)
+const makeId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  // fallback (rare)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export default function JoinPlatform() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -30,35 +41,41 @@ export default function JoinPlatform() {
 
     setLoading(true);
 
-    // 1) Create shop row in Supabase as PENDING
-    const { data, error } = await supabase
-      .from("shops")
-      .insert([
-        {
-          name: shopName,
-          address,
-          whatsapp_number: whatsappNumber,
-          shop_photo_url: shopPhotoUrl || null,
-          is_active: false,
-          subscription_status: "pending",
-        },
-      ])
-      .select("id")
-      .single();
+    try {
+      // ✅ generate ID client-side so we can pass it to Stripe without needing SELECT
+      const shopId = makeId();
 
-    if (error) {
-      console.error(error);
+      // 1) Create shop row in Supabase as PENDING (NO readback)
+      const { error } = await supabase
+        .from("shops")
+        .insert(
+          [
+            {
+              id: shopId, // ✅ IMPORTANT: requires shops.id to be UUID type (it is, by default)
+              name: shopName.trim(),
+              address: address.trim(),
+              whatsapp_number: whatsappNumber.trim(),
+              shop_photo_url: shopPhotoUrl?.trim() ? shopPhotoUrl.trim() : null,
+              is_active: false,
+              subscription_status: "pending",
+            },
+          ],
+          { returning: "minimal" } // ✅ IMPORTANT: prevents SELECT-after-insert
+        );
+
+      if (error) throw error;
+
+      setCreatedShopId(shopId);
+
+      // 2) Send barber to Stripe Payment Link with shopId included
+      // Stripe Payment Links support client_reference_id
+      const url = `${STRIPE_LINK}?client_reference_id=${encodeURIComponent(shopId)}`;
+      window.location.href = url;
+    } catch (err) {
+      console.error(err);
       alert("Failed to save shop. Check Supabase RLS policies for INSERT.");
       setLoading(false);
-      return;
     }
-
-    const shopId = data.id;
-    setCreatedShopId(shopId);
-
-    // 2) Send barber to Stripe Payment Link with the shopId included
-    const url = `${STRIPE_LINK}?client_reference_id=${encodeURIComponent(shopId)}`;
-    window.location.href = url;
   };
 
   return (
@@ -199,6 +216,13 @@ export default function JoinPlatform() {
             <p className="text-xs text-slate-500 font-medium leading-relaxed">
               After payment, your shop will go live automatically once the payment is confirmed.
             </p>
+
+            {/* optional debug */}
+            {createdShopId && (
+              <p className="text-[10px] text-slate-400 mt-2">
+                Ref: {createdShopId}
+              </p>
+            )}
           </div>
         )}
       </div>
