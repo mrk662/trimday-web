@@ -8,7 +8,7 @@ const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const supabase = createClient(supabaseUrl || "", supabaseAnon || "");
 
-const STRIPE_LINK = "https://buy.stripe.com/dRm8wPadhg4McEFf67gUM03";
+const STRIPE_LINK = "https://buy.stripe.com/test_14A00j5X14m4eMN9LNgUM00";
 
 const makeId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
