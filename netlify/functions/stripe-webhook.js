@@ -3,89 +3,81 @@ const { createClient } = require("@supabase/supabase-js");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Use Service Role Key to bypass RLS
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 exports.handler = async (event) => {
-  // Stripe sends POST
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
-
-  const sig = event.headers["stripe-signature"];
-  const rawBody = event.body;
-
-  let stripeEvent;
-  try {
-    stripeEvent = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("Webhook signature failed:", err.message);
-    return { statusCode: 400, body: `Webhook Error: ${err.message}` };
-  }
+  console.log("--- WEBHOOK START ---");
 
   try {
-    // ✅ Payment Link checkout success
+    const sig = event.headers["stripe-signature"] || event.headers["Stripe-Signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error("❌ ERROR: Missing STRIPE_WEBHOOK_SECRET");
+      return { statusCode: 500, body: "Config Error" };
+    }
+
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body, "base64").toString("utf8")
+      : event.body;
+
+    let stripeEvent;
+    try {
+      stripeEvent = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err) {
+      console.error(`❌ SIGNATURE ERROR: ${err.message}`);
+      return { statusCode: 400, body: `Webhook Error: ${err.message}` };
+    }
+
+    console.log(`✅ EVENT RECEIVED: ${stripeEvent.type}`);
+
+    // LOGIC: INITIAL CHECKOUT
     if (stripeEvent.type === "checkout.session.completed") {
       const session = stripeEvent.data.object;
+      const shopId = session.client_reference_id;
 
-      const email =
-        session.customer_details?.email ||
-        session.customer_email ||
-        null;
+      console.log(`🔎 SESSION DATA: ShopID: ${shopId}, Email: ${session.customer_details?.email}`);
 
-      if (!email) {
-        console.error("No email found on session.");
-        return { statusCode: 200, body: "No email; ignored" };
+      if (!shopId) {
+        console.error("❌ ERROR: No client_reference_id found in Stripe payload.");
+        return { statusCode: 200, body: "No ShopID provided" };
       }
 
-      // find the latest shop created with that email
-      const { data: shops, error: findErr } = await supabaseAdmin
-        .from("shops")
-        .select("id, owner_email")
-        .eq("owner_email", email)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (findErr) {
-        console.error("Supabase find error:", findErr.message);
-        return { statusCode: 500, body: "Supabase find error" };
-      }
-
-      if (!shops || shops.length === 0) {
-        console.error("No shop found for email:", email);
-        return { statusCode: 200, body: "No matching shop; ignored" };
-      }
-
-      const shopId = shops[0].id;
-
-      const { error: updateErr } = await supabaseAdmin
+      // Perform Update and capture 'data' to see if a row was actually changed
+      const { data, error } = await supabaseAdmin
         .from("shops")
         .update({
-          subscription_status: "active",
           is_active: true,
-          stripe_customer_id: session.customer || null,
-          stripe_subscription_id: session.subscription || null,
+          subscription_status: "active",
+          stripe_customer_id: session.customer,
+          stripe_subscription_id: session.subscription,
           stripe_checkout_session_id: session.id,
+          owner_email: session.customer_details?.email,
+          postcode: session.customer_details?.address?.postal_code,
         })
-        .eq("id", shopId);
+        .eq("id", shopId)
+        .select(); // Critical for debugging
 
-      if (updateErr) {
-        console.error("Supabase update error:", updateErr.message);
-        return { statusCode: 500, body: "Supabase update error" };
+      if (error) {
+        console.error("❌ SUPABASE UPDATE ERROR:", error.message);
+        return { statusCode: 500, body: JSON.stringify(error) };
       }
 
-      console.log("Activated shop:", shopId, "for", email);
+      if (!data || data.length === 0) {
+        console.error(`❌ MATCH ERROR: No shop row found in Supabase for UUID: ${shopId}`);
+        return { statusCode: 200, body: "ID not found in DB" };
+      }
+
+      console.log(`✅ SUCCESS: Shop ${shopId} is now active.`);
     }
 
     return { statusCode: 200, body: "ok" };
   } catch (err) {
-    console.error("Webhook handler error:", err);
-    return { statusCode: 500, body: "Webhook failed" };
+    console.error("❌ HANDLER CRASHED:", err.message);
+    return { statusCode: 500, body: "Crash" };
   }
 };
