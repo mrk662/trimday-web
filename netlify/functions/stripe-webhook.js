@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     const customerId = dataObject.customer;
 
     switch (stripeEvent.type) {
-      // 1. INITIAL ACTIVATION (Triggered by Checkout)
+      // 1. INITIAL ACTIVATION
       case "checkout.session.completed": {
         const shopId = dataObject.client_reference_id;
         console.log(`🔎 Checkout Session for Shop: ${shopId}`);
@@ -66,7 +66,7 @@ exports.handler = async (event) => {
         break;
       }
 
-      // 2. SUBSCRIPTION CANCELED
+      // 2. SUBSCRIPTION CANCELED (User cancels or non-payment)
       case "customer.subscription.deleted": {
         console.log(`🚫 Deactivating Customer: ${customerId}`);
         const { error } = await supabaseAdmin
@@ -82,9 +82,9 @@ exports.handler = async (event) => {
         break;
       }
 
-      // 3. SUBSCRIPTION UPDATED (Payment fails or Resumes)
+      // 3. SUBSCRIPTION UPDATED (Payment fails or status changes)
       case "customer.subscription.updated": {
-        const status = dataObject.status; // 'active', 'past_due', 'unpaid', etc.
+        const status = dataObject.status; 
         console.log(`🔄 Status Update: ${status} for Customer: ${customerId}`);
         
         const { error } = await supabaseAdmin
@@ -99,7 +99,7 @@ exports.handler = async (event) => {
         break;
       }
 
-      // 4. RENEWAL SUCCESS (Invoice Paid)
+      // 4. RENEWAL SUCCESS
       case "invoice.paid": {
         console.log(`💰 Renewal Paid for Customer: ${customerId}`);
         await supabaseAdmin
