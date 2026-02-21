@@ -24,3 +24,37 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* NEW: PWA Progress Bar Animation */
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.animate-progress {
+  animation: progress 2s infinite linear;
+}
+
+/* NEW: Standard Heartbeat for New Pings */
+@keyframes heartbeat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.1); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.1); }
+  70% { transform: scale(1); }
+}
+
+.animate-heartbeat {
+  animation: heartbeat 1.5s ease-in-out infinite;
+}
+
+/* NEW: Professional Glow Pulse for Booking Cards */
+@keyframes professional-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { transform: scale(1.02); box-shadow: 0 0 20px 5px rgba(239, 68, 68, 0.15); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.animate-booking-pulse {
+  animation: professional-pulse 2s ease-in-out infinite;
+}
