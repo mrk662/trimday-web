@@ -5,8 +5,11 @@ import {
   Clock, ChevronRight, Info 
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
-import BookingModal from "@/app/components/BookingModal"; 
 
+// FIXED: Using relative path so Netlify build can resolve the module
+import BookingModal from "../../components/BookingModal"; 
+
+// FIXED: Removed the '!' operator which is for TypeScript, not JavaScript
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -126,11 +129,11 @@ export default function PublicShopPage({ params }) {
           <div className="grid gap-3 text-left">
             {(shop.service_menu || []).map((service, idx) => (
               <button key={idx} onClick={() => handleBookService(service)} disabled={!shop.is_open} className="w-full group bg-white border-2 border-slate-50 rounded-3xl p-5 hover:border-blue-600 transition-all active:scale-95 flex items-center justify-between text-left disabled:opacity-50">
-                 <div className="text-left">
-                   <h4 className="font-black text-lg group-hover:text-blue-600 text-left">{service.name}</h4>
-                   <p className="text-slate-400 text-xs font-bold mt-1 text-left"><Clock size={12} className="inline mr-1"/> {service.duration} mins</p>
-                 </div>
-                 <span className="font-black text-lg text-blue-600 italic">£{service.price}</span>
+                  <div className="text-left">
+                    <h4 className="font-black text-lg group-hover:text-blue-600 text-left">{service.name}</h4>
+                    <p className="text-slate-400 text-xs font-bold mt-1 text-left"><Clock size={12} className="inline mr-1"/> {service.duration} mins</p>
+                  </div>
+                  <span className="font-black text-lg text-blue-600 italic">£{service.price}</span>
               </button>
             ))}
             {(!shop.service_menu || shop.service_menu.length === 0) && (
