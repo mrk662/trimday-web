@@ -3,15 +3,16 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-01-27-preview', // Stripe's latest stable version
+  apiVersion: '2025-01-27-preview', 
 });
 
+// FIXED: Removed the '!' operators (TypeScript only) that were breaking the Netlify build
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-export async function POST(req: Request) {
+export async function POST(req) {
   try {
     const { shopId } = await req.json();
 
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ url: session.url });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Portal Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
