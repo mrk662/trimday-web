@@ -4,11 +4,13 @@ import {
   Calendar, Clock, User, Phone, Power, Loader2, 
   MapPin, LogOut, CheckCircle, XCircle, MessageSquare, 
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
-  Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing 
+  Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
+  CreditCard, Share2, Download, MessageCircle
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
 import OneSignal from 'react-onesignal';
+import { QRCode } from 'react-qrcode-logo'; // CHANGED: The Fancy QR Library
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -84,7 +86,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
       setTimeLeft(remaining);
       if (remaining === 0) {
         clearInterval(timer);
-        onUpdate(b.id, 'cancelled'); 
+        onUpdate(b, 'cancelled'); 
       }
     }, 1000);
     return () => clearInterval(timer);
@@ -115,7 +117,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => onUpdate(b.id, 'cancelled')} className="px-6 py-4 bg-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2">
+          <button onClick={() => onUpdate(b, 'cancelled')} className="px-6 py-4 bg-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2">
             <XCircle size={18} /> {isWalkIn ? "Cancel" : "Decline"}
           </button>
           {!isWalkIn && (
@@ -123,7 +125,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
               Change
             </button>
           )}
-          <button onClick={() => onUpdate(b.id, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>
+          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>
             <CheckCircle size={20} /> {isWalkIn ? "Finish Trim" : "Accept"}
           </button>
         </div>
@@ -148,13 +150,21 @@ export default function BarberDashboard() {
   const [showSoundSettings, setShowSoundSettings] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
 
+  // ADDED: Dynamic Base URL for QR and WhatsApp
+  const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk");
+  
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
+
   const soundEnabledRef = useRef(soundEnabled);
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
-  // OneSignal Init
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -172,7 +182,6 @@ export default function BarberDashboard() {
     initOneSignal();
   }, []);
 
-  // Wake Lock to keep screen on
   useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
@@ -238,7 +247,7 @@ export default function BarberDashboard() {
       if (b.client_name === "Walk-in Client") {
         const timeParts = b.booking_time.split(" - ");
         if (timeParts.length === 2 && currentClock >= timeParts[1]) {
-           await updateBookingStatus(b.id, 'completed'); 
+            await updateBookingStatus(b, 'completed'); 
         }
       }
     });
@@ -262,21 +271,56 @@ export default function BarberDashboard() {
 
   const fetchBookings = async (id) => {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase.from("bookings").select("*").eq("shop_id", id).eq('booking_date', today).neq("status", "completed").neq("status", "cancelled").order("created_at", { ascending: false });
+    const { data } = await supabase.from("bookings").select("*")
+      .eq("shop_id", id) 
+      .eq('booking_date', today)
+      .neq("status", "completed")
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false });
+
     setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => b.status === "confirmed") || []);
   };
 
-  const updateBookingStatus = async (bookingId, newStatus) => {
+  const updateBookingStatus = async (booking, newStatus) => {
+    const bookingId = typeof booking === 'object' ? booking.id : booking;
     const { error } = await supabase.from("bookings").update({ status: newStatus }).eq("id", bookingId);
+    
     if (!error) {
       if (newStatus === 'cancelled') alert("Booking cancelled.");
+      if (newStatus === 'confirmed' && typeof booking === 'object' && booking.client_name !== "Walk-in Client") {
+        await fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ booking: booking, type: 'confirmed' }),
+        });
+      }
+
       if (newStatus === 'completed' || newStatus === 'cancelled') {
         if (shop?.id) await supabase.from("shops").update({ current_status: 'available', status_updated_at: new Date().toISOString() }).eq("id", shop.id);
       }
     }
     fetchBookings(localStorage.getItem("barberShopId"));
     setReschedulingBooking(null);
+  };
+
+  const handleBillingPortal = async () => {
+    if (!shop?.id) return;
+    try {
+      const res = await fetch('/api/stripe/portal', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId: shop.id })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert("Error: " + (data.error || "Billing portal unavailable."));
+      }
+    } catch (err) {
+      console.error("Billing Error:", err);
+    }
   };
 
   const toggleBarberStatus = async (id, currentStatus) => {
@@ -332,13 +376,33 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
+  // UPDATED: Much cleaner download logic thanks to react-qrcode-logo natively using canvas
+  const downloadQR = () => {
+    const canvas = document.getElementById("shop-qr");
+    if (canvas) {
+      const pngFile = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `${shop?.name?.replace(/\s+/g, '-') || 'TrimDay-Shop'}-QR.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    } else {
+      alert("QR code not ready yet.");
+    }
+  };
+
+  // UPDATED: Uses dynamic baseUrl
+  const shareWhatsApp = () => {
+    const bookingUrl = `${baseUrl}/shop/${shop?.id}`;
+    const text = `Hey! You can now book your trims with us online at ${shop?.name} here: ${bookingUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   const handleLogout = () => { localStorage.removeItem("barberShopId"); window.location.href = "/login"; };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-black animate-pulse text-slate-400 uppercase tracking-widest text-center">Loading Dashboard...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 text-left">
-      {/* Prime audio with playsInline */}
       <audio id="bookingAlert" src={`/${selectedSound}.mp3`} preload="auto" playsInline />
 
       <div className="relative w-full h-48 md:h-64 bg-slate-200 overflow-hidden shadow-inner text-left">
@@ -366,11 +430,10 @@ export default function BarberDashboard() {
                 <button onClick={() => {
                     const nextState = !soundEnabled;
                     setSoundEnabled(nextState);
-                    // CRITICAL FIX: "Prime" the audio context on first click so Chrome allows future plays
                     const audioEl = document.getElementById("bookingAlert");
                     if (audioEl) {
                         audioEl.play().then(() => {
-                           if (!nextState) audioEl.pause(); // Silent prime
+                           if (!nextState) audioEl.pause();
                         }).catch(() => {});
                     }
                 }} className={`p-4 rounded-2xl transition-all ${soundEnabled ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-50 text-slate-400'}`}>
@@ -403,10 +466,15 @@ export default function BarberDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto text-left">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto text-left">
             <Link href="/dashboard/staff" className="flex items-center justify-center gap-2 px-4 py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 transition-all shadow-lg text-center"><UserPlus size={18} /> Team</Link>
             <button onClick={() => setIsEditingMenu(true)} className="px-4 py-5 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Scissors size={18} /> Menu</button>
-            <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Walk-In</button>
+            <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 text-left">Walk-In</button>
+            
+            <button onClick={handleBillingPortal} className="px-4 py-5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2">
+              <CreditCard size={18} /> Billing
+            </button>
+
             <button onClick={toggleStatus} className={`px-4 py-5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 ${shop?.is_open ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-50 text-red-500 shadow-red-200'}`}><Power size={18} className="inline mr-2" /> {shop?.is_open ? "OPEN" : "CLOSED"}</button>
           </div>
         </div>
@@ -446,8 +514,8 @@ export default function BarberDashboard() {
                       </div>
                       <div className="flex gap-2 text-left justify-end">
                         <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg text-left"><Phone size={20}/></a>
-                        <button onClick={() => updateBookingStatus(b.id, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20 text-left"><XCircle size={22} /></button>
-                        <button onClick={() => updateBookingStatus(b.id, 'completed')} className="p-4 bg-green-500 rounded-2xl text-white hover:bg-green-400 transition-all shadow-lg border border-green-400 text-left"><CheckCircle size={22} strokeWidth={3} /></button>
+                        <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20 text-left"><XCircle size={22} /></button>
+                        <button onClick={() => updateBookingStatus(b, 'completed')} className="p-4 bg-green-500 rounded-2xl text-white hover:bg-green-400 transition-all shadow-lg border border-green-400 text-left"><CheckCircle size={22} strokeWidth={3} /></button>
                       </div>
                     </div>
                   ))
@@ -474,11 +542,49 @@ export default function BarberDashboard() {
                 })}
               </div>
             </section>
+
+            {/* ADDED: Fancy QR Code Marketing Card */}
+            <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit text-left">
+              <h2 className="text-xl font-black mb-1 flex items-center gap-2 text-left uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
+              
+              <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
+                {/* THE NEW FANCY QR COMPONENT */}
+                <QRCode 
+                  id="shop-qr"
+                  value={`${baseUrl}/shop/${shop?.id}`}
+                  size={160}
+                  qrStyle="dots"
+                  eyeRadius={10}
+                  logoImage="/icon.png"
+                  logoWidth={40}
+                  logoHeight={40}
+                  bgColor="#f8fafc" // slate-50 to match background
+                  fgColor="#0f172a" // slate-900 for dark contrast
+                  quietZone={10}
+                />
+                <p className="mt-4 text-[10px] font-black text-slate-900 uppercase italic">Scan to book</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={downloadQR}
+                  className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"
+                >
+                  <Download size={14} /> Download
+                </button>
+                <button 
+                  onClick={shareWhatsApp}
+                  className="flex items-center justify-center gap-2 bg-green-500 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-green-600 transition-all shadow-lg"
+                >
+                  <MessageCircle size={14} /> WhatsApp
+                </button>
+              </div>
+            </section>
           </div>
         </div>
       </div>
 
-      {/* ALL MODALS (SERVICE MENU, WALK-IN, CHANGE TIME) RESTORED EXACTLY */}
       {isEditingMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
@@ -535,6 +641,14 @@ export default function BarberDashboard() {
               <button onClick={async () => {
                 if (!newTimeInput) return;
                 await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
+                await fetch('/api/notify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    booking: { ...reschedulingBooking, proposed_time: newTimeInput }, 
+                    type: 'rescheduled' 
+                  }),
+                });
                 setReschedulingBooking(null); setNewTimeInput(""); fetchBookings(shop.id);
               }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center">Send</button>
             </div>

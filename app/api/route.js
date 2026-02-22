@@ -1,48 +1,42 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import Stripe from "stripe";
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2025-01-27-preview', // Stripe's latest stable version
+});
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export async function POST(req) {
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-
-  let event;
-
+export async function POST(req: Request) {
   try {
-    event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
-  } catch (err) {
-    return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
-  }
+    const { shopId } = await req.json();
 
-  // Handle the successful payment event
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const shopId = session.client_reference_id; // This is the ID we passed in join.js
+    if (!shopId) return new NextResponse('Missing Shop ID', { status: 400 });
 
-    // Update the shop to be active in Supabase
-    const { error } = await supabase
-      .from("shops")
-      .update({ 
-        is_active: true, 
-        subscription_status: "active" 
-      })
-      .eq("id", shopId);
+    // 1. Get the Stripe Customer ID from your shops table
+    const { data: shop, error } = await supabase
+      .from('shops')
+      .select('stripe_customer_id')
+      .eq('id', shopId)
+      .single();
 
-    if (error) {
-      console.error("Supabase Update Error:", error);
-      return NextResponse.json({ error: "Failed to activate shop" }, { status: 500 });
+    if (error || !shop?.stripe_customer_id) {
+      return NextResponse.json({ error: 'No subscription found' }, { status: 404 });
     }
 
-    console.log(`✅ Shop ${shopId} is now active!`);
-  }
+    // 2. Create the hosted billing portal session
+    const session = await stripe.billingPortal.sessions.create({
+      customer: shop.stripe_customer_id,
+      return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard`,
+    });
 
-  return NextResponse.json({ received: true });
+    return NextResponse.json({ url: session.url });
+  } catch (err: any) {
+    console.error("Portal Error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

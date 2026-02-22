@@ -77,17 +77,13 @@ export default function BookingModal({ shopId, service, services, onClose }) {
     slotDate: null,
   });
 
-  // UPDATED: Fetching and Realtime Logic
   useEffect(() => {
     if (!shopId) return;
 
     const fetchInitialData = async () => {
       setLoadingBarbers(true);
-      // 1. Get shop times
       const { data: shop } = await supabase.from("shops").select("open_time, close_time, name").eq("id", shopId).single();
       setShopTimeData(shop);
-      
-      // 2. Initial fetch of ONLINE barbers only
       await refreshBarbers();
       setLoadingBarbers(false);
     };
@@ -97,13 +93,12 @@ export default function BookingModal({ shopId, service, services, onClose }) {
         .from("barbers")
         .select("id, name, is_available_today")
         .eq("shop_id", shopId)
-        .eq("is_available_today", true); // CRITICAL FILTER
+        .eq("is_available_today", true);
       setAvailableBarbers(data || []);
     };
 
     fetchInitialData();
 
-    // 3. REALTIME: Watch for barbers toggling Online/Offline
     const channel = supabase.channel(`barber-availability-${shopId}`)
       .on('postgres_changes', { 
         event: '*', 
@@ -111,7 +106,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
         table: 'barbers', 
         filter: `shop_id=eq.${shopId}` 
       }, () => {
-        refreshBarbers(); // Update the list the second someone clicks "Online"
+        refreshBarbers();
       })
       .subscribe();
 
@@ -139,8 +134,10 @@ export default function BookingModal({ shopId, service, services, onClose }) {
       return;
     }
 
-    if (booking.customerPhone.length !== 11) {
-      alert("Please enter a valid 11-digit mobile number.");
+    // UPDATED: Added strict 07 validation check
+    const phoneRegex = /^07\d{9}$/;
+    if (!phoneRegex.test(booking.customerPhone)) {
+      alert("Please enter a valid 11-digit mobile number starting with 07.");
       return;
     }
 
@@ -177,7 +174,11 @@ export default function BookingModal({ shopId, service, services, onClose }) {
       if (!isSafe) {
         await fetch('/api/notify', {
           method: 'POST',
-          body: JSON.stringify({ booking: newBooking, type: 'verify_email' })
+          body: JSON.stringify({ 
+            booking: newBooking, 
+            type: 'verify_email',
+            customSubject: `Confirm your appointment ✂️ - ${booking.customerName.trim()}`
+          })
         });
       }
       setStep(4);
@@ -189,7 +190,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-end md:items-center justify-center p-0 md:p-4 text-left animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-lg rounded-t-[3rem] md:rounded-[3rem] p-8 md:p-10 shadow-2xl relative overflow-hidden">
+      <div className="bg-white w-full max-w-lg rounded-t-[3rem] md:rounded-[3rem] p-8 md:p-10 shadow-2xl relative overflow-hidden text-left">
         
         <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-all z-10 text-left">
           <X size={20} />
@@ -202,13 +203,12 @@ export default function BookingModal({ shopId, service, services, onClose }) {
           </div>
         )}
 
-        {/* STEP 1: SERVICES (Kept Original) */}
         {step === 1 && (
           <div className="space-y-3 max-h-[60vh] overflow-y-auto text-left">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2 text-left">Select Service</p>
             {services?.map((s, idx) => (
                 <button key={idx} onClick={() => { setBooking({ ...booking, service: s }); setStep(2); }} className="w-full flex justify-between items-center p-6 border-2 border-slate-50 hover:border-blue-600 rounded-[2rem] transition-all group hover:bg-blue-50/30 text-left">
-                  <div className="flex items-center gap-4 text-left text-left">
+                  <div className="flex items-center gap-4 text-left">
                     <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-blue-100 transition-colors text-left"><Scissors size={18} className="text-slate-400 group-hover:text-blue-600 text-left"/></div>
                     <div className="text-left font-black group-hover:text-blue-600 text-lg text-left">{s.name}</div>
                   </div>
@@ -218,20 +218,16 @@ export default function BookingModal({ shopId, service, services, onClose }) {
           </div>
         )}
 
-        {/* STEP 2: BARBER & TIME (Updated with "Online" check) */}
         {step === 2 && (
           <div className="space-y-8 text-left">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 ml-2 text-left">Choose Barber</p>
               {loadingBarbers ? <div className="h-16 w-full bg-slate-100 rounded-2xl animate-pulse text-left"></div> : (
                 <div className="flex gap-3 overflow-x-auto pb-2 text-left">
-                  {/* "Any Barber" option always visible */}
                   <button onClick={() => setBooking({ ...booking, barber: null })} className={`flex-1 min-w-[100px] p-4 rounded-2xl border-2 transition-all text-left ${booking.barber === null ? "border-blue-600 bg-blue-50" : "border-slate-50 bg-slate-50"}`}>
                       <div className="font-black text-sm text-left">Any</div>
                       <div className="text-[9px] font-black text-blue-500 uppercase text-left">First Avail</div>
                   </button>
-
-                  {/* List of currently "Online" barbers */}
                   {availableBarbers.map((b) => (
                     <button key={b.id} onClick={() => setBooking({ ...booking, barber: b })} className={`flex-1 min-w-[100px] p-4 rounded-2xl border-2 transition-all text-left ${booking.barber?.id === b.id ? "border-blue-600 bg-blue-50" : "border-slate-50 bg-slate-50"}`}>
                       <div className="font-black text-sm text-left">{b.name}</div>
@@ -241,9 +237,9 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                 </div>
               )}
             </div>
-            <div className="text-left text-left">
+            <div className="text-left">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 ml-2 text-left">Next Available Slots</p>
-                <div className="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto text-left text-left">
+                <div className="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto text-left">
                   {slots.slice(0, 12).map((d) => (
                     <button key={d.toISOString()} onClick={() => { setBooking({ ...booking, slotDate: d }); setStep(3); }} className="p-4 bg-slate-50 hover:bg-black hover:text-white rounded-2xl font-black text-sm transition-all shadow-sm text-left">
                       {formatTime(d)}
@@ -254,7 +250,6 @@ export default function BookingModal({ shopId, service, services, onClose }) {
           </div>
         )}
 
-        {/* STEP 3: DETAILS (Kept Original) */}
         {step === 3 && (
           <div className="space-y-6 text-left">
             <div className="bg-blue-50 p-6 rounded-[2rem] border border-blue-100 text-left">
@@ -266,35 +261,47 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                </div>
             </div>
 
-            <div className="space-y-4 text-left text-left">
+            <div className="space-y-4 text-left">
               <input type="text" className="hidden" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
-
               <div className="relative text-left">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-left" size={18} />
                 <input type="text" placeholder="Full Name" className="w-full p-5 pl-12 bg-slate-50 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 text-left" value={booking.customerName} onChange={(e) => setBooking({ ...booking, customerName: e.target.value })} />
               </div>
-              <div className="relative text-left text-left">
+              <div className="relative text-left">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-left" size={18} />
                 <input type="email" placeholder="Email Address" className="w-full p-5 pl-12 bg-slate-50 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 text-left" value={booking.customerEmail} onChange={(e) => setBooking({ ...booking, customerEmail: e.target.value })} />
               </div>
-              <div className="relative text-left text-left text-left">
+              <div className="relative text-left">
                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-left" size={18} />
                 <input 
                   type="tel" 
-                  placeholder="Mobile Number (11 Digits)" 
+                  placeholder="Mobile Number (Starts 07)" 
                   maxLength={11} 
                   className="w-full p-5 pl-12 bg-slate-50 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 text-left" 
                   value={booking.customerPhone} 
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, ''); 
-                    if (val.length <= 11) setBooking({ ...booking, customerPhone: val });
+                    // UPDATED: Prevent typing more than 11 and validate prefix 07
+                    if (val.length <= 11) {
+                        setBooking({ ...booking, customerPhone: val });
+                    }
                   }} 
                 />
               </div>
+              {/* Inline warning if they start with something other than 07 */}
+              {booking.customerPhone.length >= 2 && !booking.customerPhone.startsWith('07') && (
+                <p className="text-[10px] font-black uppercase text-red-500 italic ml-2 mt-[-10px]">Must start with 07</p>
+              )}
             </div>
 
             <button 
-              disabled={!booking.customerName || !booking.customerEmail.includes('@') || !booking.customerEmail.includes('.') || booking.customerPhone.length !== 11 || isSubmitting} 
+              disabled={
+                !booking.customerName || 
+                !booking.customerEmail.includes('@') || 
+                !booking.customerEmail.includes('.') || 
+                !/^07\d{9}$/.test(booking.customerPhone) || // UPDATED: Strict button check
+                isSubmitting
+              } 
               onClick={handleFinalConfirm} 
               className="w-full bg-black text-white p-6 rounded-[2rem] font-black shadow-xl disabled:opacity-30 flex items-center justify-center gap-3 active:scale-95 transition-all text-center"
             >
@@ -303,26 +310,25 @@ export default function BookingModal({ shopId, service, services, onClose }) {
           </div>
         )}
 
-        {/* STEP 4: SUCCESS (Kept Original) */}
         {step === 4 && (
-          <div className="text-center py-10 animate-in zoom-in-95 text-center text-center">
-            <div className="bg-green-100 text-green-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce text-center text-center">
-              <CheckCircle size={48} className="text-center text-center"/>
+          <div className="text-center py-10 animate-in zoom-in-95">
+            <div className="bg-green-100 text-green-600 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
+              <CheckCircle size={48} />
             </div>
             
-            <h3 className="text-4xl font-black tracking-tight mb-4 text-center text-center">
+            <h3 className="text-4xl font-black tracking-tight mb-4">
               {wasPreVerified ? "Booking Sent!" : "Verify Email"}
             </h3>
             
-            <p className="text-slate-500 font-bold mb-4 leading-relaxed px-4 text-lg text-center text-center text-center">
+            <p className="text-slate-500 font-bold mb-4 leading-relaxed px-4 text-lg">
               {wasPreVerified 
                 ? "You're on the safe list! The barber has been pinged directly." 
                 : <>Check your inbox! You must click the <b>verification link</b> in your email to send this request to the barber.</>
               }
             </p>
             
-            <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-10 text-center text-center text-center">
-              <p className="text-xs font-bold text-slate-400 italic text-center text-center">
+            <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-10 text-center">
+              <p className="text-xs font-bold text-slate-400 italic">
                 {wasPreVerified 
                   ? "Sit back and relax. We'll email you once the barber confirms your spot."
                   : "First time here? We just need to make sure you're real. Verification takes 5 seconds."
@@ -330,7 +336,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
               </p>
             </div>
 
-            <button onClick={onClose} className="w-full bg-slate-100 text-slate-900 p-6 rounded-[2.5rem] font-black text-xl shadow-inner hover:bg-slate-200 transition-all text-center text-center text-center">Sweet, thanks!</button>
+            <button onClick={onClose} className="w-full bg-slate-100 text-slate-900 p-6 rounded-[2.5rem] font-black text-xl shadow-inner hover:bg-slate-200 transition-all text-center">Sweet, thanks!</button>
           </div>
         )}
       </div>
