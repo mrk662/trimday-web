@@ -134,7 +134,6 @@ export default function BookingModal({ shopId, service, services, onClose }) {
       return;
     }
 
-    // UPDATED: Added strict 07 validation check
     const phoneRegex = /^07\d{9}$/;
     if (!phoneRegex.test(booking.customerPhone)) {
       alert("Please enter a valid 11-digit mobile number starting with 07.");
@@ -174,10 +173,10 @@ export default function BookingModal({ shopId, service, services, onClose }) {
       if (!isSafe) {
         await fetch('/api/notify', {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             booking: newBooking, 
-            type: 'verify_email',
-            customSubject: `Confirm your appointment ✂️ - ${booking.customerName.trim()}`
+            type: 'verify_email'
           })
         });
       }
@@ -280,15 +279,27 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                   className="w-full p-5 pl-12 bg-slate-50 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 text-left" 
                   value={booking.customerPhone} 
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, ''); 
-                    // UPDATED: Prevent typing more than 11 and validate prefix 07
+                    // NUCLEAR ENFORCEMENT LOGIC:
+                    // 1. Strip everything that isn't a number instantly
+                    let val = e.target.value.replace(/\D/g, ''); 
+                    
+                    if (val.length > 0) {
+                      // 2. Force the first digit to be '0'
+                      if (val.length === 1 && val !== '0') {
+                        val = '0';
+                      } 
+                      // 3. Force the second digit to be '7'
+                      else if (val.length >= 2 && !val.startsWith('07')) {
+                        val = '07' + val.substring(2);
+                      }
+                    }
+
                     if (val.length <= 11) {
                         setBooking({ ...booking, customerPhone: val });
                     }
                   }} 
                 />
               </div>
-              {/* Inline warning if they start with something other than 07 */}
               {booking.customerPhone.length >= 2 && !booking.customerPhone.startsWith('07') && (
                 <p className="text-[10px] font-black uppercase text-red-500 italic ml-2 mt-[-10px]">Must start with 07</p>
               )}
@@ -299,7 +310,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                 !booking.customerName || 
                 !booking.customerEmail.includes('@') || 
                 !booking.customerEmail.includes('.') || 
-                !/^07\d{9}$/.test(booking.customerPhone) || // UPDATED: Strict button check
+                !/^07\d{9}$/.test(booking.customerPhone) || 
                 isSubmitting
               } 
               onClick={handleFinalConfirm} 
