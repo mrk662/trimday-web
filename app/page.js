@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import BookingModal from "./components/BookingModal";
 import ShopCard from "./components/ShopCard"; 
+import OneSignal from 'react-onesignal'; // Ensure you have installed 'react-onesignal'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -19,6 +20,31 @@ export default function LandingPage() {
   const [radius, setRadius] = useState(5);
   const [selectedShop, setSelectedShop] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // ---------- ONESIGNAL SETUP ----------
+  useEffect(() => {
+    const initOneSignal = async () => {
+      try {
+        await OneSignal.init({
+          appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
+          allowLocalhostAsSecureOrigin: true, // Crucial for your local testing
+          serviceWorkerPath: 'OneSignalSDKWorker.js',
+          notifyButton: {
+            enable: true,
+            position: 'bottom-right',
+            displayPredicate: () => {
+              return OneSignal.Notifications.permissionStatus !== 'granted';
+            },
+          },
+        });
+        console.log("✅ OneSignal Initialized");
+      } catch (err) {
+        console.error("❌ OneSignal Init Error:", err);
+      }
+    };
+
+    initOneSignal();
+  }, []);
 
   // ---------- Distance Logic ----------
   const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -48,7 +74,6 @@ export default function LandingPage() {
         const townData = await townRes.json();
         const pcData = await pcRes.json();
 
-        // 1. Process Boroughs/Towns
         const townItems = (townData.result || []).map(r => ({
           label: pickTownFromPostcodeRecord(r),
           lat: r.latitude,
@@ -56,13 +81,11 @@ export default function LandingPage() {
           type: "BOROUGH"
         }));
 
-        // 2. Process Postcodes
         const pcItems = (pcData.result || []).map(pc => ({
           label: pc,
           type: "POSTCODE"
         }));
 
-        // Merge, deduplicate by label, and set
         const combined = [...pcItems, ...townItems];
         setSuggestions(combined.filter((v,i,a)=>a.findIndex(t=>(t.label===v.label))===i).slice(0, 8));
       } catch (e) {
@@ -115,7 +138,6 @@ export default function LandingPage() {
           <span className="text-xl font-black tracking-tight italic">TrimDay</span>
         </div>
         <div className="flex items-center gap-3">
-          {/* RESTORED: Barber Login link */}
           <Link href="/login" className="px-5 py-2.5 rounded-full border-2 border-slate-100 font-bold text-xs text-slate-500">
             Barber Login
           </Link>
@@ -137,7 +159,6 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* SEARCH BAR & RADIUS BUTTONS */}
         <div className="relative max-w-2xl mx-auto mb-16">
           <div className="flex bg-white border-2 border-slate-100 rounded-[2.5rem] shadow-2xl p-2 focus-within:ring-8 ring-blue-50 transition-all">
             <input 
@@ -153,7 +174,6 @@ export default function LandingPage() {
             </button>
           </div>
 
-          {/* RADIUS TOGGLE BUTTONS */}
           <div className="flex justify-center mt-6 gap-3">
             {[5, 10, 25].map((dist) => (
               <button 
@@ -184,19 +204,17 @@ export default function LandingPage() {
           )}
         </div>
 
-        {/* RESULTS GRID */}
         <div className="space-y-12 pb-24">
           {shops.map((shop) => (
             <ShopCard 
               key={shop.id} 
               shop={shop} 
-              onBook={() => { setSelectedShop(shop); setIsModalOpen(true); }} // RESTORED MODAL TRIGGER
+              onBook={() => { setSelectedShop(shop); setIsModalOpen(true); }}
             />
           ))}
         </div>
       </main>
 
-      {/* MODAL OVERLAY */}
       {isModalOpen && selectedShop && (
         <BookingModal 
           shopId={selectedShop.id} 
