@@ -1,11 +1,12 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Head from "next/head"; // ADDED for SEO and Icon fixes
 import { Scissors, MapPin, Loader2 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import BookingModal from "./components/BookingModal";
 import ShopCard from "./components/ShopCard"; 
-import OneSignal from 'react-onesignal'; // Ensure you have installed 'react-onesignal'
+import OneSignal from 'react-onesignal';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -25,19 +26,18 @@ export default function LandingPage() {
   useEffect(() => {
     const initOneSignal = async () => {
       try {
-        await OneSignal.init({
-          appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-          allowLocalhostAsSecureOrigin: true, // Crucial for your local testing
-          serviceWorkerPath: 'OneSignalSDKWorker.js',
-          notifyButton: {
-            enable: true,
-            position: 'bottom-right',
-            displayPredicate: () => {
-              return OneSignal.Notifications.permissionStatus !== 'granted';
+        if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
+          await OneSignal.init({
+            appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
+            allowLocalhostAsSecureOrigin: true,
+            serviceWorkerPath: '/OneSignalSDKWorker.js', // Ensure leading slash
+            notifyButton: {
+              enable: true,
+              position: 'bottom-right',
             },
-          },
-        });
-        console.log("✅ OneSignal Initialized");
+          });
+          console.log("✅ OneSignal Initialized");
+        }
       } catch (err) {
         console.error("❌ OneSignal Init Error:", err);
       }
@@ -56,10 +56,9 @@ export default function LandingPage() {
   };
 
   const looksLikePostcode = (value) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d?[A-Z]{0,2}$/.test(value.trim().toUpperCase());
-
   const pickTownFromPostcodeRecord = (r) => (r?.admin_district || r?.post_town || r?.parish || "").trim();
 
-  // ---------- DUAL AUTOCOMPLETE LOGIC (Postcodes + Boroughs) ----------
+  // ---------- DUAL AUTOCOMPLETE LOGIC ----------
   useEffect(() => {
     const fetchSuggestions = async () => {
       const q = query.trim();
@@ -132,6 +131,14 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      <Head>
+        <title>TrimDay | Book Your Barber</title>
+        <meta name="description" content="Professional UK Barber Management - Find a chair now." />
+        {/* THE IPHONE ICON FIX */}
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
+        <meta name="theme-color" content="#0F172A" />
+      </Head>
+
       <nav className="border-b px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-[100]">
         <div className="flex items-center gap-2">
           <div className="bg-black p-2 rounded-xl text-white"><Scissors size={18} /></div>

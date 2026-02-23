@@ -136,7 +136,7 @@ export default function BarberDashboard() {
   const [shop, setShop] = useState(null);
   const [pendingBookings, setPendingBookings] = useState([]);
   const [confirmedSchedule, setConfirmedSchedule] = useState([]);
-  const [allTodayBookings, setAllTodayBookings] = useState([]); // ADDED: Used for revenue tracking
+  const [allTodayBookings, setAllTodayBookings] = useState([]);
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -162,15 +162,30 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
+  // UPDATED: Improved Init with Silent Sync for persistence
   useEffect(() => {
     const initOneSignal = async () => {
       try {
+        const shopId = localStorage.getItem("barberShopId");
         if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
           await OneSignal.init({
             appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
             allowLocalhostAsSecureOrigin: true,
           });
-          setPushEnabled(OneSignal.Notifications.hasPermission);
+
+          // Check if permission already exists
+          const permission = OneSignal.Notifications.permission;
+          const subId = OneSignal.User.PushSubscription.id;
+          
+          if (permission && subId) {
+            setPushEnabled(true);
+            // Silent sync to Supabase to ensure database matches browser ID
+            if (shopId) {
+              await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shopId);
+            }
+          } else {
+            setPushEnabled(false);
+          }
         }
       } catch (err) {
         console.error("OneSignal Init Error:", err);
@@ -271,7 +286,7 @@ export default function BarberDashboard() {
     const { data } = await supabase.from("bookings").select("*")
       .eq("shop_id", id) 
       .eq('booking_date', today)
-      .neq("status", "cancelled") // Only excluding cancelled to ensure we can calculate revenue
+      .neq("status", "cancelled") 
       .order("created_at", { ascending: false });
 
     setAllTodayBookings(data || []);
@@ -279,7 +294,6 @@ export default function BarberDashboard() {
     setConfirmedSchedule(data?.filter(b => b.status === "confirmed") || []);
   };
 
-  // ADDED: Simple Revenue Calculation Function
   const calculateRevenue = () => {
     let total = 0;
     const menu = shop?.service_menu || DEFAULT_SERVICES;
@@ -402,7 +416,7 @@ export default function BarberDashboard() {
   };
 
   const shareWhatsApp = () => {
-    const bookingUrl = `${baseUrl}/shop/${shop?.slug}`; // FIXED SLUG
+    const bookingUrl = `${baseUrl}/shop/${shop?.slug}`; 
     const text = `Hey! You can now book your trims with us online at ${shop?.name} here: ${bookingUrl}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -456,7 +470,6 @@ export default function BarberDashboard() {
 
                 {showSoundSettings && (
                     <div className="absolute top-16 left-0 w-64 bg-white border border-slate-100 shadow-2xl rounded-3xl p-4 z-50">
-                        {/* THE NEW REVENUE TRACKER */}
                         <div className="mb-5 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center shadow-inner">
                             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic mb-1">Today's Revenue</p>
                             <p className="text-2xl font-black text-blue-600">£{calculateRevenue()}</p>
@@ -564,18 +577,20 @@ export default function BarberDashboard() {
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
               
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
+                {/* UPDATED: Increased Quiet Zone to 25 for better Android scanning */}
+                
                 <QRCode 
                   id="shop-qr"
-                  value={`${baseUrl}/shop/${shop?.slug}`} // FIXED SLUG
+                  value={`${baseUrl}/shop/${shop?.slug}`} 
                   size={160}
                   qrStyle="dots"
                   eyeRadius={10}
                   logoImage="/icon.png"
-                  logoWidth={40}
-                  logoHeight={40}
+                  logoWidth={35}
+                  logoHeight={35}
                   bgColor="#f8fafc" 
                   fgColor="#0f172a" 
-                  quietZone={10}
+                  quietZone={25} 
                 />
                 <p className="mt-4 text-[10px] font-black text-slate-900 uppercase italic">Scan to book</p>
               </div>
