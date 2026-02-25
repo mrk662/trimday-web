@@ -5,7 +5,7 @@ import {
   MapPin, LogOut, CheckCircle, XCircle, MessageSquare, 
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
-  CreditCard, Share2, Download, MessageCircle
+  CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -32,37 +32,52 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
 function PwaPrompt() {
   const [show, setShow] = useState(true);
   const [device, setDevice] = useState("ios");
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) setIsInstalled(true);
     const ua = navigator.userAgent.toLowerCase();
     if (ua.indexOf("android") > -1) setDevice("android");
   }, []);
 
-  if (!show) return null;
+  if (!show || isInstalled) return null;
 
   return (
-    <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] mb-8 shadow-2xl border-4 border-slate-800 relative text-left overflow-hidden">
-      <button onClick={() => setShow(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white z-10"><X size={20}/></button>
+    <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 rounded-[2.5rem] mb-8 shadow-2xl relative text-left overflow-hidden">
+      <button onClick={() => setShow(false)} className="absolute top-4 right-4 text-blue-200 hover:text-white z-10 transition-colors"><X size={20}/></button>
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-4">
-          <div className="bg-slate-800 p-4 rounded-3xl flex-shrink-0">
+          <div className="bg-white/20 p-4 rounded-3xl flex-shrink-0">
             <Maximize2 className="text-white" size={28} />
           </div>
           <div>
-            <h3 className="text-xl font-black italic tracking-tighter uppercase leading-none">Install Dashboard</h3>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Full-Screen Mode</p>
+            <h3 className="text-2xl font-black italic tracking-tighter uppercase leading-none">Get the App</h3>
+            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Install to get push alerts</p>
           </div>
         </div>
-        <div className="bg-white/5 p-5 rounded-[2rem] border border-white/10 space-y-3">
+        <div className="bg-black/20 p-5 rounded-[2rem] border border-white/10 space-y-4">
           {device === "ios" ? (
             <>
-              <p className="text-xs font-bold italic text-slate-300">1. Tap the <span className="text-blue-500 font-black underline">Share Icon</span> at the bottom</p>
-              <p className="text-xs font-bold italic text-slate-300">2. Select <span className="text-white font-black underline">Add to Home Screen</span></p>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Share size={18} /></div>
+                <p className="text-sm font-bold text-white">1. Tap the <span className="font-black underline">Share button</span> at the bottom of Safari.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Plus size={18} /></div>
+                <p className="text-sm font-bold text-white">2. Scroll down and tap <span className="font-black underline">Add to Home Screen</span>.</p>
+              </div>
             </>
           ) : (
             <>
-              <p className="text-xs font-bold italic text-slate-300">1. Tap the <span className="text-blue-500 font-black underline">Three Dots (⋮)</span> top right</p>
-              <p className="text-xs font-bold italic text-slate-300">2. Select <span className="text-white font-black underline">Install App</span></p>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><MoreVertical size={18} /></div>
+                <p className="text-sm font-bold text-white">1. Tap the <span className="font-black underline">Menu button</span> (three dots) top right.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Maximize2 size={18} /></div>
+                <p className="text-sm font-bold text-white">2. Tap <span className="font-black underline">Install app</span> or Add to Home Screen.</p>
+              </div>
             </>
           )}
         </div>
@@ -123,7 +138,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
               Change
             </button>
           )}
-          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>
+          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-50 text-white hover:bg-green-600'}`}>
             <CheckCircle size={20} /> {isWalkIn ? "Finish Trim" : "Accept"}
           </button>
         </div>
@@ -150,6 +165,14 @@ export default function BarberDashboard() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk");
   
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [shopSettings, setShopSettings] = useState({
+    name: "",
+    shop_photo_url: "",
+    google_review_url: "",
+    business_phone: "",
+  });
+
   const soundEnabledRef = useRef(soundEnabled);
 
   useEffect(() => {
@@ -162,7 +185,6 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
-  // UPDATED: Improved Init with Silent Sync for persistence
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -173,13 +195,11 @@ export default function BarberDashboard() {
             allowLocalhostAsSecureOrigin: true,
           });
 
-          // Check if permission already exists
           const permission = OneSignal.Notifications.permission;
           const subId = OneSignal.User.PushSubscription.id;
           
           if (permission && subId) {
             setPushEnabled(true);
-            // Silent sync to Supabase to ensure database matches browser ID
             if (shopId) {
               await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shopId);
             }
@@ -271,6 +291,12 @@ export default function BarberDashboard() {
     if (shopData) {
       setMenuItems(shopData.service_menu || DEFAULT_SERVICES);
       setShop(shopData);
+      setShopSettings({
+        name: shopData.name || "",
+        shop_photo_url: shopData.shop_photo_url || "",
+        google_review_url: shopData.google_review_url || "",
+        business_phone: shopData.business_phone || "",
+      });
       await Promise.all([fetchBookings(id), fetchBarbers(id)]);
     }
     setLoading(false);
@@ -349,6 +375,51 @@ export default function BarberDashboard() {
     }
   };
 
+  // --- FIXED SAVE FUNCTION ---
+  const saveSettings = async () => {
+    if (!shop?.id) return;
+
+    const { error } = await supabase
+      .from("shops")
+      .update({
+        name: shopSettings.name,
+        shop_photo_url: shopSettings.shop_photo_url,
+        google_review_url: shopSettings.google_review_url,
+        business_phone: shopSettings.business_phone
+      })
+      .eq("id", shop.id);
+
+    if (error) {
+      console.error("Supabase Save Error:", error);
+      alert(`Save failed: ${error.message}`);
+    } else {
+      setShop({ ...shop, ...shopSettings });
+      setIsEditingSettings(false);
+      alert("Settings updated successfully!");
+    }
+  };
+
+  // --- UPDATED: BENEFIT SUMMARY UPSELL ---
+  const handleTeamClick = (e) => {
+    if (shop?.subscription_tier !== 'pro') {
+      e.preventDefault();
+      
+      const confirmUpgrade = window.confirm(
+        "🚀 UPGRADE TO PRO PACK (£34.99/mo)\n\n" +
+        "Everything in Solo, PLUS:\n" +
+        "• Add Multiple Barbers to your shop\n" +
+        "• Team Duty/Availability toggles\n" +
+        "• Staff Phone Login Access\n" +
+        "• Increased Booking Capacity\n\n" +
+        "Proceed to secure billing?"
+      );
+
+      if (confirmUpgrade) {
+        handleBillingPortal();
+      }
+    }
+  };
+
   const toggleBarberStatus = async (id, currentStatus) => {
     await supabase.from("barbers").update({ is_available_today: !currentStatus }).eq("id", id);
     fetchBarbers(shop.id);
@@ -402,12 +473,12 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
-  const downloadQR = () => {
-    const canvas = document.getElementById("shop-qr");
+  const downloadQR = (id, filename) => {
+    const canvas = document.getElementById(id);
     if (canvas) {
       const pngFile = canvas.toDataURL("image/png");
       const downloadLink = document.createElement("a");
-      downloadLink.download = `${shop?.name?.replace(/\s+/g, '-') || 'TrimDay-Shop'}-QR.png`;
+      downloadLink.download = `${filename}.png`;
       downloadLink.href = pngFile;
       downloadLink.click();
     } else {
@@ -464,7 +535,7 @@ export default function BarberDashboard() {
                    {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
                 </button>
                 
-                <button onClick={() => setShowSoundSettings(!showSoundSettings)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-all">
+                <button onClick={() => setIsEditingSettings(true)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-all">
                     <Settings size={24} />
                 </button>
 
@@ -496,7 +567,19 @@ export default function BarberDashboard() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
-            <Link href="/dashboard/staff" className="flex items-center justify-center gap-2 px-4 py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 transition-all shadow-lg text-center"><UserPlus size={18} /> Team</Link>
+            <Link 
+              href="/dashboard/staff" 
+              onClick={handleTeamClick}
+              className={`flex items-center justify-center gap-2 px-4 py-5 rounded-2xl font-black text-[10px] uppercase transition-all text-center relative overflow-hidden group ${
+                shop?.subscription_tier === 'pro' 
+                  ? 'bg-slate-900 text-white hover:bg-blue-600 shadow-lg' 
+                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+              }`}
+            >
+              {shop?.subscription_tier === 'pro' ? <UserPlus size={18} /> : <Lock size={16} />}
+              <span>Team</span>
+            </Link>
+
             <button onClick={() => setIsEditingMenu(true)} className="px-4 py-5 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Scissors size={18} /> Menu</button>
             <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Walk-In</button>
             
@@ -554,6 +637,7 @@ export default function BarberDashboard() {
           </div>
 
           <div className="space-y-8 w-full">
+            {/* STAFF ON DUTY SECTION */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-8 flex items-center gap-2 uppercase italic tracking-tighter"><User className="text-blue-600" /> Staff on Duty</h2>
               <div className="space-y-4">
@@ -572,13 +656,12 @@ export default function BarberDashboard() {
               </div>
             </section>
 
+            {/* MARKETING QR SECTION */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
               
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
-                {/* UPDATED: Increased Quiet Zone to 25 for better Android scanning */}
-                
                 <QRCode 
                   id="shop-qr"
                   value={`${baseUrl}/shop/${shop?.slug}`} 
@@ -597,7 +680,7 @@ export default function BarberDashboard() {
 
               <div className="grid grid-cols-2 gap-3">
                 <button 
-                  onClick={downloadQR}
+                  onClick={() => downloadQR("shop-qr", `${shop?.name || 'Shop'}-Booking-QR`)}
                   className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"
                 >
                   <Download size={14} /> Download
@@ -614,6 +697,48 @@ export default function BarberDashboard() {
         </div>
       </div>
 
+      {/* SHOP SETTINGS MODAL - CLEAN & FIXED VERSION */}
+      {isEditingSettings && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Shop Settings</h3>
+              <button onClick={() => setIsEditingSettings(false)} className="text-slate-400 hover:text-slate-900 transition-colors"><X size={24} /></button>
+            </div>
+            
+            <div className="space-y-6 text-left">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Shop Name</label>
+                <input type="text" value={shopSettings.name} onChange={(e) => setShopSettings({...shopSettings, name: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Logo URL</label>
+                <input type="text" placeholder="https://..." value={shopSettings.shop_photo_url} onChange={(e) => setShopSettings({...shopSettings, shop_photo_url: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Business Phone Number</label>
+                <input type="text" placeholder="07123..." value={shopSettings.business_phone} onChange={(e) => setShopSettings({...shopSettings, business_phone: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Google Review Link</label>
+                <input type="text" placeholder="https://g.page/r/..." value={shopSettings.google_review_url} onChange={(e) => setShopSettings({...shopSettings, google_review_url: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-10">
+              <button onClick={() => setIsEditingSettings(false)} className="flex-1 bg-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase text-slate-500 hover:bg-slate-200 transition-colors">Discard</button>
+              <button onClick={saveSettings} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+                <Save size={16}/> Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REMAINDER OF FILE: MENU & RESCHEDULE MODALS */}
       {isEditingMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
@@ -624,8 +749,8 @@ export default function BarberDashboard() {
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-4 mb-8">
               {menuItems.map((item, idx) => (
                 <div key={idx} className="flex gap-3 items-end bg-slate-50 p-4 rounded-[2rem] border border-transparent hover:border-blue-100 transition-all">
-                  <div className="flex-1"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Service Name</label><input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm" /></div>
-                  <div className="w-24"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Price £</label><input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm" /></div>
+                  <div className="flex-1 text-left"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Service Name</label><input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" /></div>
+                  <div className="w-24 text-left"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Price £</label><input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" /></div>
                   <button onClick={() => setMenuItems(menuItems.filter((_, i) => i !== idx))} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 size={18}/></button>
                 </div>
               ))}
@@ -645,7 +770,7 @@ export default function BarberDashboard() {
             <div className="grid gap-2">
               {menuItems.map((service, idx) => (
                 <button key={idx} onClick={() => confirmWalkIn(service)} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group">
-                  <div className="text-left"><p className="font-black text-lg">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase">{service.duration} mins</p></div>
+                  <div className="text-left"><p className="font-black text-lg text-slate-900">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase">{service.duration} mins</p></div>
                   <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black">£{service.price}</span>
                 </button>
               ))}
@@ -658,9 +783,9 @@ export default function BarberDashboard() {
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-2 tracking-tight">Change Time</h3>
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900">Change Time</h3>
             <div className="relative mb-6">
-              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
+              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-slate-900" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
                 <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />

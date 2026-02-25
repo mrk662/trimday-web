@@ -133,39 +133,46 @@ export default function LandingPage() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       <Head>
         <title>TrimDay | Book Your Barber</title>
-        <meta name="description" content="Professional UK Barber Management - Find a chair now." />
+        <meta name="description" content="Discover top local barbers and hair salons. Secure your slot in seconds." />
         {/* THE IPHONE ICON FIX */}
         <link rel="apple-touch-icon" href="/apple-icon.png" />
-        <meta name="theme-color" content="#0F172A" />
+        <meta name="theme-color" content="#ffffff" />
       </Head>
 
-      <nav className="border-b px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-[100]">
+      {/* MOBILE-FIXED HEADER */}
+      <nav className="border-b px-4 md:px-6 py-4 flex justify-between items-center bg-white sticky top-0 z-[100]">
         <div className="flex items-center gap-2">
           <div className="bg-black p-2 rounded-xl text-white"><Scissors size={18} /></div>
           <span className="text-xl font-black tracking-tight italic">TrimDay</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/login" className="px-5 py-2.5 rounded-full border-2 border-slate-100 font-bold text-xs text-slate-500">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Link href="/login" className="px-3 md:px-5 py-2.5 rounded-full border-2 border-slate-100 font-bold text-[10px] md:text-xs text-slate-500 whitespace-nowrap">
             Barber Login
           </Link>
           <Link href="/join">
-            <button className="bg-blue-600 text-white px-5 py-2.5 rounded-full font-black text-xs shadow-lg">
-              List Your Shop
+            <button className="bg-blue-600 text-white px-3 md:px-5 py-2.5 rounded-full font-black text-[10px] md:text-xs shadow-lg whitespace-nowrap">
+              List Shop
             </button>
           </Link>
         </div>
       </nav>
 
-      <main className="max-w-4xl mx-auto pt-12 px-4">
-        <div className="text-center mb-10">
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-4 text-slate-900">
-            Find a chair <span className="text-blue-600">now.</span>
+      {/* UPDATED HERO SECTION */}
+      <main className="max-w-4xl mx-auto pt-16 px-4">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter mb-6 text-slate-900 leading-[1.1]">
+            Book your <br className="md:hidden" />
+            <span className="text-blue-600 underline decoration-blue-200">next trim.</span>
           </h1>
-          <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.3em]">
+          <p className="max-w-md mx-auto text-slate-500 font-bold text-sm md:text-base leading-relaxed mb-6 px-4">
+            Discover top local barbers and hair salons. Secure your slot in seconds—no app download required.
+          </p>
+          <p className="text-slate-300 font-black uppercase text-[10px] tracking-[0.3em]">
             SEARCHING WITHIN {radius} MILES
           </p>
         </div>
 
+        {/* SEARCH BOX (Unchanged logic) */}
         <div className="relative max-w-2xl mx-auto mb-16">
           <div className="flex bg-white border-2 border-slate-100 rounded-[2.5rem] shadow-2xl p-2 focus-within:ring-8 ring-blue-50 transition-all">
             <input 
@@ -194,7 +201,7 @@ export default function LandingPage() {
           </div>
 
           {suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[110]">
+            <div className="absolute top-[80px] left-0 right-0 mt-3 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-[110]">
               {suggestions.map((s, i) => (
                 <button 
                   key={i} 

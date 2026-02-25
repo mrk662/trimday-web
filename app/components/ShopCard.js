@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { MapPin, Calendar, MessageSquare, Navigation, Clock } from "lucide-react";
+import { MapPin, Calendar, Phone, Navigation, Clock } from "lucide-react";
 import Link from "next/link";
 
 export default function ShopCard({ shop, onBook }) {
@@ -16,8 +16,6 @@ export default function ShopCard({ shop, onBook }) {
   const googleMapsLink = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
     `${shop.address} ${shop.postcode}`
   )}`;
-
-  const whatsappLink = `https://wa.me/${shop.whatsapp_number}?text=Hi ${shop.name}, I found you on Trimday.`;
 
   // Time Ago Logic for the "Last Seen" feature
   const getTimeAgo = (timestamp) => {
@@ -37,7 +35,7 @@ export default function ShopCard({ shop, onBook }) {
     if (shop.current_status === 'booked out') return <span className="bg-red-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Booked Out</span>;
     if (shop.current_status === 'with client') return <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Busy</span>;
     return (
-      <span className="bg-[#25D366] text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+      <span className="bg-green-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
         <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div> Live Now
       </span>
     );
@@ -99,8 +97,8 @@ export default function ShopCard({ shop, onBook }) {
       </div>
 
       {/* ACTION BUTTONS */}
-      <div className="grid grid-cols-3 gap-2">
-        {/* Triggers Modal on Home Page */}
+      <div className={`grid ${shop.business_phone ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+        {/* Book Online */}
         <button 
           onClick={onBook}
           className="bg-black text-white py-3 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"
@@ -108,15 +106,17 @@ export default function ShopCard({ shop, onBook }) {
           <Calendar size={14} /> Book Online
         </button>
         
-        <a 
-          href={whatsappLink} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="bg-[#25D366] text-white py-3 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"
-        >
-          <MessageSquare size={14} /> Whatsapp
-        </a>
+        {/* Contact Number - Only shows if Barber has set it in Cogwheel */}
+        {shop.business_phone && (
+          <a 
+            href={`tel:${shop.business_phone}`}
+            className="bg-blue-600 text-white py-3 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"
+          >
+            <Phone size={14} /> Contact
+          </a>
+        )}
 
+        {/* Directions */}
         <a 
           href={googleMapsLink} 
           target="_blank" 

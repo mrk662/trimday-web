@@ -1,11 +1,13 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { 
-  Calendar, Clock, Power, Loader2, Maximize2, X, 
+  Calendar, Clock, Power, Loader2, Maximize2, X, Plus,
   CheckCircle, XCircle, Scissors, Volume2, VolumeX, Activity, 
-  Phone, LogOut, ChevronDown, RefreshCcw
+  Phone, LogOut, ChevronDown, RefreshCcw, Share, MoreVertical, QrCode
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import OneSignal from 'react-onesignal';
+import { QRCodeSVG } from "qrcode.react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -20,19 +22,55 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
 
 function PwaPrompt() {
   const [show, setShow] = useState(true);
-  if (!show) return null;
+  const [device, setDevice] = useState("ios");
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) setIsInstalled(true);
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.indexOf("android") > -1) setDevice("android");
+  }, []);
+
+  if (!show || isInstalled) return null;
+
   return (
-    <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] mb-8 shadow-2xl border-4 border-blue-600 animate-in fade-in zoom-in-95 relative text-left">
-      <button onClick={() => setShow(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
-      <div className="flex items-center gap-5">
-        <div className="bg-blue-600 p-4 rounded-3xl shadow-lg shadow-blue-500/50 flex-shrink-0">
-          <Maximize2 className="text-white" size={28} />
+    <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 rounded-[2.5rem] mb-8 shadow-2xl relative text-left overflow-hidden">
+      <button onClick={() => setShow(false)} className="absolute top-4 right-4 text-blue-200 hover:text-white z-10 transition-colors"><X size={20}/></button>
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center gap-4">
+          <div className="bg-white/20 p-4 rounded-3xl flex-shrink-0">
+            <Maximize2 className="text-white" size={28} />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black italic tracking-tighter uppercase leading-none">Get the App</h3>
+            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Install to get push alerts</p>
+          </div>
         </div>
-        <div className="flex-1 text-left">
-          <h3 className="text-xl font-black flex items-center gap-2 text-left">Add to Home Screen <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[10px]">+</span></h3>
-          <p className="text-xs font-bold text-slate-300 mt-1 text-left leading-relaxed italic">
-            "Tap Share then Add to Home Screen for a full-screen widget."
-          </p>
+        <div className="bg-black/20 p-5 rounded-[2rem] border border-white/10 space-y-4">
+          {device === "ios" ? (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Share size={18} /></div>
+                <p className="text-sm font-bold text-white">1. Tap the <span className="font-black underline">Share button</span> at the bottom of Safari.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Plus size={18} /></div>
+                <p className="text-sm font-bold text-white">2. Scroll down and tap <span className="font-black underline">Add to Home Screen</span>.</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><MoreVertical size={18} /></div>
+                <p className="text-sm font-bold text-white">1. Tap the <span className="font-black underline">Menu button</span> (three dots) top right.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2.5 rounded-xl"><Maximize2 size={18} /></div>
+                <p className="text-sm font-bold text-white">2. Tap <span className="font-black underline">Install app</span> or Add to Home Screen.</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -47,10 +85,27 @@ export default function StaffGoldenDashboard() {
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [showWalkInMenu, setShowWalkInMenu] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
   
   const bookingAudio = useRef(null);
+
+  useEffect(() => {
+    const initOneSignal = async () => {
+      try {
+        if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
+          await OneSignal.init({
+            appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
+            allowLocalhostAsSecureOrigin: true,
+          });
+        }
+      } catch (err) {
+        console.error("OneSignal Init Error:", err);
+      }
+    };
+    initOneSignal();
+  }, []);
 
   useEffect(() => {
     bookingAudio.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -76,17 +131,32 @@ export default function StaffGoldenDashboard() {
 
   const fetchInitialData = async (bId, sId) => {
     setLoading(true);
-    const [bRes, sRes] = await Promise.all([
-      supabase.from("barbers").select("*").eq("id", bId).single(),
-      supabase.from("shops").select("*").eq("id", sId).single()
-    ]);
-    setBarber(bRes.data);
-    setShop(sRes.data);
-    await fetchBookings(bId, sId);
-    setLoading(false);
+    try {
+      const [bRes, sRes] = await Promise.all([
+        supabase.from("barbers").select("*").eq("id", bId).single(),
+        supabase.from("shops").select("*").eq("id", sId).single()
+      ]);
+
+      if (bRes.data) setBarber(bRes.data);
+      if (sRes.data) {
+        localStorage.setItem("shopName", sRes.data.name);
+        let parsedMenu = sRes.data.service_menu;
+        if (typeof parsedMenu === 'string') {
+          try { parsedMenu = JSON.parse(parsedMenu); } catch (e) { parsedMenu = []; }
+        }
+        setShop({ ...sRes.data, service_menu: parsedMenu });
+      }
+
+      await fetchBookings(bId, sId);
+    } catch (err) {
+      console.error("Fetch Data Error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleDuty = async () => {
+    if (!barber) return;
     const newStatus = !barber.is_available_today;
     const { error } = await supabase.from("barbers").update({ is_available_today: newStatus }).eq("id", barber.id);
     if (!error) setBarber({ ...barber, is_available_today: newStatus });
@@ -101,14 +171,12 @@ export default function StaffGoldenDashboard() {
       .neq("status", "completed")
       .neq("status", "cancelled");
 
-    // FIX: Show direct bookings even if they are 'unverified'
     const myChair = data?.filter(b => 
       String(b.barber_id) === String(bId) && 
       ["confirmed", "pending", "unverified", "rescheduled"].includes(b.status)
     ) || [];
     setMyBookings(myChair);
     
-    // Broadcast for "Any Barber" (also showing unverified so pings are instant)
     const openPings = data?.filter(b => 
       b.barber_id === null && 
       ["pending", "unverified"].includes(b.status)
@@ -117,29 +185,65 @@ export default function StaffGoldenDashboard() {
   };
 
   const claimBooking = async (id) => {
+    const booking = broadcast.find(b => b.id === id);
+    if (!booking || !barber) return;
+
     const { error } = await supabase.from("bookings").update({ 
       barber_id: barber.id, 
       barber_name: barber.name,
       status: 'confirmed' 
     }).eq("id", id);
     
-    if (!error) fetchBookings(barber.id, shop.id);
+    if (!error) {
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking: { ...booking, barber_name: barber.name }, type: 'confirmed' }),
+      });
+      fetchBookings(barber.id, shop.id);
+    }
   };
 
   const updateStatus = async (id, status) => {
+    const booking = myBookings.find(b => b.id === id);
     await supabase.from("bookings").update({ status }).eq("id", id);
+    
+    if (status === 'confirmed' && booking && !booking.client_name.includes("Walk-in")) {
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking: booking, type: 'confirmed' }),
+      });
+    }
+
+    if (status === 'completed' || status === 'cancelled') {
+      if (shop?.id) await supabase.from("shops").update({ current_status: 'available', status_updated_at: new Date().toISOString() }).eq("id", shop.id);
+    }
+
     fetchBookings(barber.id, shop.id);
   };
 
   const handleReschedule = async () => {
-    if (!newTimeInput) return;
+    if (!newTimeInput || !reschedulingBooking) return;
+    
     await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
+    
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        booking: { ...reschedulingBooking, proposed_time: newTimeInput }, 
+        type: 'rescheduled' 
+      }),
+    });
+
     setReschedulingBooking(null);
     setNewTimeInput("");
     fetchBookings(barber.id, shop.id);
   };
 
   const handleWalkIn = async (service) => {
+    if (!shop || !barber) return;
     const formatT = (d) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     const now = new Date();
     const end = new Date(now.getTime() + service.duration * 60000);
@@ -148,7 +252,7 @@ export default function StaffGoldenDashboard() {
       shop_id: shop.id, 
       barber_id: barber.id,
       barber_name: barber.name,
-      client_name: "Walk-in", 
+      client_name: "Walk-in Client", 
       client_phone: "Walk-in",
       client_email: `walkin-${Date.now()}@system.com`, 
       service_name: service.name, 
@@ -158,6 +262,7 @@ export default function StaffGoldenDashboard() {
     }]);
 
     if (!error) {
+      await supabase.from("shops").update({ current_status: 'with client', status_updated_at: new Date().toISOString() }).eq("id", shop.id);
       setShowWalkInMenu(false);
       fetchBookings(barber.id, shop.id);
     }
@@ -176,18 +281,31 @@ export default function StaffGoldenDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20 text-left font-sans">
       <div className="relative w-full h-48 bg-slate-900 overflow-hidden shadow-inner">
-        <img src={shop?.shop_photo_url} className="w-full h-full object-cover opacity-40 grayscale-[0.5]" alt="Shop" />
+        {shop?.shop_photo_url && <img src={shop.shop_photo_url} className="w-full h-full object-cover opacity-40 grayscale-[0.5]" alt="Shop" />}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent" />
-        <button onClick={handleLogout} className="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl">
-          <LogOut size={20} />
-        </button>
+        
+        {/* Header Actions */}
+        <div className="absolute top-6 right-6 z-20 flex gap-3">
+          <button 
+            onClick={() => setShowQrModal(true)} 
+            className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl"
+          >
+            <QrCode size={20} />
+          </button>
+          <button 
+            onClick={handleLogout} 
+            className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-xl mx-auto px-6 -mt-16 relative z-20 text-left text-left">
+      <div className="max-w-xl mx-auto px-6 -mt-16 relative z-20">
         <PwaPrompt />
 
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex justify-between items-center mb-10 text-left">
-          <div className="flex items-center gap-4 text-left text-left">
+        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex justify-between items-center mb-10">
+          <div className="flex items-center gap-4">
             {shop?.shop_photo_url ? (
               <img src={shop.shop_photo_url} className="w-16 h-16 rounded-[1.5rem] object-cover border-2 border-slate-100 shadow-md" alt="Logo" />
             ) : (
@@ -197,16 +315,16 @@ export default function StaffGoldenDashboard() {
                 {barber?.name?.charAt(0)}
               </div>
             )}
-            <div className="text-left text-left">
-              <h1 className="text-2xl font-black tracking-tight text-left flex items-center gap-2">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
                 {barber?.name}
                 <span className={`w-2 h-2 rounded-full animate-pulse ${barber?.is_available_today ? 'bg-green-500' : 'bg-red-500'}`} />
               </h1>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">{shop?.name}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{shop?.name || 'My Shop'}</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2 text-left">
+          <div className="flex items-center gap-2">
             <button 
               onClick={toggleDuty} 
               className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[10px] uppercase transition-all active:scale-95 ${
@@ -228,16 +346,16 @@ export default function StaffGoldenDashboard() {
           <Scissors size={24} /> Add Walk-In Now
         </button>
 
-        <section className="mb-10 text-left text-left">
+        <section className="mb-10">
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2">
             <Activity size={14} className="text-blue-600" /> Unclaimed Pings ({broadcast.length})
           </h2>
-          <div className="space-y-4 text-left">
+          <div className="space-y-4">
             {broadcast.map(b => (
               <div key={b.id} className="p-6 bg-blue-600 text-white rounded-[2.5rem] flex justify-between items-center shadow-xl border-4 border-blue-400 animate-in slide-in-from-top-4">
-                <div className="text-left">
-                  <p className="font-black text-xl leading-tight text-left">{b.client_name}</p>
-                  <p className="text-xs font-bold opacity-80 mt-1 text-left">
+                <div>
+                  <p className="font-black text-xl leading-tight">{b.client_name}</p>
+                  <p className="text-xs font-bold opacity-80 mt-1">
                     {b.status === 'unverified' ? '⏳ Email Pending' : `${b.service_name} • ${b.booking_time}`}
                   </p>
                 </div>
@@ -252,29 +370,29 @@ export default function StaffGoldenDashboard() {
           </div>
         </section>
 
-        <section className="text-left text-left">
+        <section>
           <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2">
             <Calendar size={14} className="text-blue-600" /> My Schedule Today
           </h2>
-          <div className="space-y-4 text-left">
+          <div className="space-y-4">
             {myBookings.length === 0 ? (
               <div className="py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100 font-black text-slate-200 uppercase text-[10px] tracking-widest italic">No trims yet</div>
             ) : (
               myBookings.map(b => (
-                <div key={b.id} className="p-6 bg-white rounded-[2.5rem] border border-slate-100 flex flex-col gap-4 shadow-sm group hover:shadow-md transition-all text-left">
-                   <div className="flex justify-between items-center text-left text-left">
-                      <div className="flex gap-4 items-center text-left">
+                <div key={b.id} className="p-6 bg-white rounded-[2.5rem] border border-slate-100 flex flex-col gap-4 shadow-sm group hover:shadow-md transition-all">
+                   <div className="flex justify-between items-center">
+                      <div className="flex gap-4 items-center">
                         <div className={`p-4 rounded-2xl min-w-[85px] text-center ${b.status === 'unverified' ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-slate-900 text-white'}`}>
                           <span className="font-black text-xs">{b.booking_time.split(' ')[0]}</span>
                         </div>
-                        <div className="text-left">
-                          <p className="font-black text-xl text-slate-900 text-left">{b.client_name}</p>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">
+                        <div>
+                          <p className="font-black text-xl text-slate-900">{b.client_name}</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                             {b.status === 'unverified' ? '⏳ Awaiting Verify' : b.service_name}
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2 text-left">
+                      <div className="flex gap-2">
                         {(b.status === 'pending' || b.status === 'unverified' || b.status === 'rescheduled') ? (
                           <button 
                             onClick={() => updateStatus(b.id, 'confirmed')} 
@@ -285,7 +403,7 @@ export default function StaffGoldenDashboard() {
                         ) : (
                           <button 
                             onClick={() => updateStatus(b.id, 'completed')} 
-                            className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all text-left"
+                            className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all"
                           >
                             <CheckCircle size={24} />
                           </button>
@@ -293,7 +411,7 @@ export default function StaffGoldenDashboard() {
                       </div>
                    </div>
 
-                   <div className="flex gap-2 pt-2 border-t border-slate-50 text-left">
+                   <div className="flex gap-2 pt-2 border-t border-slate-50">
                       <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white">
                         <XCircle size={14}/> Cancel
                       </button>
@@ -311,15 +429,39 @@ export default function StaffGoldenDashboard() {
         </section>
       </div>
 
+      {/* QR MODAL */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
+            <div className="bg-blue-600/10 p-6 rounded-[2rem] inline-block mb-6 text-blue-600">
+              <QrCode size={48} />
+            </div>
+            <h3 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tighter italic">Shop Code</h3>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Clients scan this to book</p>
+            
+            <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-8">
+              <QRCodeSVG 
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.id}`}
+                size={220}
+                level="H"
+                includeMargin={false}
+              />
+            </div>
+            
+            <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Close</button>
+          </div>
+        </div>
+      )}
+
       {showWalkInMenu && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6 text-left">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-md rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95">
             <h3 className="text-3xl font-black text-slate-900 text-center mb-10 uppercase tracking-tighter italic">Quick Walk-In</h3>
-            <div className="grid gap-3 text-left">
+            <div className="grid gap-3">
               {(shop?.service_menu || []).map((s, idx) => (
-                <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
-                  <div className="text-left"><p className="font-black text-xl text-left">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase text-left">{s.duration} mins</p></div>
-                  <span className="text-blue-600 group-hover:text-blue-700 text-2xl italic font-black text-left">£{s.price}</span>
+                <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group">
+                  <div className="text-left"><p className="font-black text-xl">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
+                  <span className="text-blue-600 group-hover:text-blue-700 text-2xl italic font-black">£{s.price}</span>
                 </button>
               ))}
             </div>
@@ -329,10 +471,10 @@ export default function StaffGoldenDashboard() {
       )}
 
       {reschedulingBooking && (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 text-left">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
             <h3 className="text-2xl font-black mb-6 tracking-tight text-center">Change Time</h3>
-            <div className="relative mb-6 text-left">
+            <div className="relative mb-6">
               <select 
                 className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center" 
                 value={newTimeInput} 
