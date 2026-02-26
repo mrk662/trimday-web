@@ -2,7 +2,8 @@
 import React, { useState } from "react";
 import { 
   Camera, CheckCircle, Loader2, Lock, 
-  MapPin, X, Maximize2, Minimize2, Eye, EyeOff, Info, Globe
+  MapPin, X, Maximize2, Minimize2, Eye, EyeOff, Info, Globe, ShieldCheck,
+  LayoutDashboard, Users, Bell, BarChart3, Scissors
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -11,9 +12,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-// This pulls the Live Price ID from your Vercel Environment Variables
-const STRIPE_JOIN_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_JOIN; 
-const SITE_URL = "https://trimday.co.uk"; 
+// 🔥 UPDATED: Added Price IDs for both tiers. (Make sure these match your .env.local file!)
+const STRIPE_SOLO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_SOLO; 
+const STRIPE_PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO; 
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://trimday.co.uk"; 
 
 // --- HELPERS ---
 const ukPostcodeRegex = /^([A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}|GIR ?0AA)$/i;
@@ -42,6 +45,7 @@ export default function JoinPlatform() {
   const [uploading, setUploading] = useState(false);
 
   // Form State
+  const [selectedPlan, setSelectedPlan] = useState("solo"); // 🔥 NEW: Track selected plan
   const [shopName, setShopName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +56,7 @@ export default function JoinPlatform() {
   const [googleUrl, setGoogleUrl] = useState("");
   const [shopPhotoUrl, setShopPhotoUrl] = useState("");
   const [photoObjectFit, setPhotoObjectFit] = useState("cover");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // --- VALIDATION ---
   const isNameValid = shopName.trim().length >= 3;
@@ -62,7 +67,7 @@ export default function JoinPlatform() {
   const isPostcodeValid = ukPostcodeRegex.test(postcode.trim());
 
   const canGoStep2 = isNameValid && isPhoneValid && isPasswordValid && passwordsMatch;
-  const canGoStep3 = isAddressValid && isPostcodeValid;
+  const canGoStep3 = isAddressValid && isPostcodeValid && agreedToTerms;
 
   const handleFileUpload = async (event) => {
     try {
@@ -92,6 +97,7 @@ export default function JoinPlatform() {
     const shopId = crypto.randomUUID();
 
     try {
+      // 1. Geo-location check
       const geoResponse = await fetch(`https://api.postcodes.io/postcodes/${postcode.trim().replace(/\s/g, "")}`);
       const geoData = await geoResponse.json();
       
@@ -102,6 +108,7 @@ export default function JoinPlatform() {
         lng = geoData.result.longitude;
       }
 
+      // 2. Create the Shop Record (Includes the tier they picked)
       const { error } = await supabase.from("shops").insert([{
         id: shopId,
         name: shopName.trim(),
@@ -118,24 +125,30 @@ export default function JoinPlatform() {
         is_open: true,
         is_active: false,
         subscription_status: "pending",
+        subscription_tier: selectedPlan, // 🔥 Save which plan they chose
         created_at: new Date().toISOString()
       }]);
 
       if (error) throw error;
 
-      const res = await fetch('/api/stripe/create-checkout', {
+      // 3. Trigger Stripe Checkout API with the correct Price ID based on selection
+      const targetPriceId = selectedPlan === 'pro' ? STRIPE_PRO_PRICE_ID : STRIPE_SOLO_PRICE_ID;
+
+      const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          priceId: STRIPE_JOIN_PRICE_ID,
-          shopId: shopId,
-          successUrl: `${SITE_URL}/success?shop_id=${shopId}`,
-          cancelUrl: `${SITE_URL}/join`
+          priceId: targetPriceId,
+          shopId: shopId
         })
       });
 
       const { url } = await res.json();
-      window.location.href = url;
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error("Could not generate payment link.");
+      }
 
     } catch (err) {
       alert("Error: " + err.message);
@@ -145,6 +158,44 @@ export default function JoinPlatform() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-12 px-4 font-sans text-slate-900 text-left">
+      
+      {/* --- SALES PITCH / EXAMPLES SECTION --- */}
+      <div className="max-w-xl w-full text-center mb-12">
+        <div className="bg-black text-white p-3 rounded-2xl inline-flex mb-6 shadow-xl rotate-3">
+          <Scissors size={24} />
+        </div>
+        <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 leading-none">
+          The Future of <br/><span className="text-blue-600 underline">Your Shop.</span>
+        </h1>
+        <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mb-10 italic">
+          Automate your booking flow in 60 seconds.
+        </p>
+
+        {/* FEATURE EXAMPLES GRID */}
+        <div className="grid grid-cols-2 gap-3 text-left mb-8">
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <LayoutDashboard className="text-blue-500 mb-2" size={20} />
+            <p className="text-[10px] font-black uppercase italic text-slate-400">Live Dashboard</p>
+            <p className="text-xs font-bold leading-tight">Track every trim as it happens.</p>
+          </div>
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <Users className="text-purple-500 mb-2" size={20} />
+            <p className="text-[10px] font-black uppercase italic text-slate-400">Team Sync</p>
+            <p className="text-xs font-bold leading-tight">Separate schedules for every chair.</p>
+          </div>
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <Bell className="text-orange-500 mb-2" size={20} />
+            <p className="text-[10px] font-black uppercase italic text-slate-400">Instant Pings</p>
+            <p className="text-xs font-bold leading-tight">New bookings sent to your phone.</p>
+          </div>
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <BarChart3 className="text-green-500 mb-2" size={20} />
+            <p className="text-[10px] font-black uppercase italic text-slate-400">Growth Stats</p>
+            <p className="text-xs font-bold leading-tight">See your daily and weekly revenue.</p>
+          </div>
+        </div>
+      </div>
+
       <div className="max-w-xl w-full bg-white rounded-[3rem] shadow-xl p-8 md:p-12 border border-slate-100">
         
         <div className="flex gap-3 mb-10">
@@ -156,6 +207,25 @@ export default function JoinPlatform() {
         {step === 1 && (
           <div className="space-y-6">
             <h2 className="text-4xl font-black tracking-tight italic uppercase">The Basics.</h2>
+
+            {/* 🔥 NEW: SELECT PLAN BEFORE CONTINUING */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+               <button 
+                  onClick={() => setSelectedPlan('solo')}
+                  className={`p-4 rounded-2xl border-2 text-left transition-all ${selectedPlan === 'solo' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'}`}
+               >
+                  <p className="font-black uppercase italic text-sm text-slate-900">Solo Pack</p>
+                  <p className="text-[10px] font-bold text-slate-500">1 Barber</p>
+               </button>
+               <button 
+                  onClick={() => setSelectedPlan('pro')}
+                  className={`p-4 rounded-2xl border-2 text-left transition-all ${selectedPlan === 'pro' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 bg-white hover:border-slate-300'}`}
+               >
+                  <p className="font-black uppercase italic text-sm text-slate-900">Pro Pack</p>
+                  <p className="text-[10px] font-bold text-slate-500">Multi-Chair</p>
+               </button>
+            </div>
+
             <div className="space-y-4">
               <input 
                 type="text" 
@@ -249,6 +319,18 @@ export default function JoinPlatform() {
                   />
                 </div>
 
+                <div className="flex gap-4 p-5 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                  <input 
+                    type="checkbox" 
+                    checked={agreedToTerms} 
+                    onChange={() => setAgreedToTerms(!agreedToTerms)} 
+                    className="w-6 h-6 mt-0.5 accent-blue-600" 
+                  />
+                  <p className="text-[11px] font-bold text-slate-500 leading-tight uppercase">
+                    I agree to the <span className="text-slate-900 underline">Terms of Service</span> and acknowledge I am selecting a monthly subscription plan.
+                  </p>
+                </div>
+
                 <div className="bg-blue-50 p-6 rounded-[2rem] border-2 border-blue-100 flex items-start gap-4">
                   <Info className="text-blue-600 shrink-0" size={20} />
                   <p className="text-[11px] font-bold text-blue-900 leading-tight">
@@ -259,7 +341,7 @@ export default function JoinPlatform() {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setStep(1)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-5 rounded-2xl uppercase text-xs">Back</button>
-                <button onClick={() => setStep(3)} disabled={!canGoStep3 || uploading} className="flex-[2] bg-black text-white font-black py-5 rounded-2xl shadow-lg active:scale-95 transition-all uppercase italic">Verify & Join</button>
+                <button onClick={() => setStep(3)} disabled={!canGoStep3 || uploading} className="flex-[2] bg-black text-white font-black py-5 rounded-2xl shadow-lg active:scale-95 transition-all uppercase italic">Verify Details</button>
               </div>
             </div>
           </div>
@@ -272,13 +354,13 @@ export default function JoinPlatform() {
             <p className="text-slate-400 font-bold text-sm uppercase tracking-widest -mt-4">Finalizing your shop account</p>
             
             <div className="bg-slate-50 rounded-[2rem] p-6 text-left border border-slate-100 space-y-3 font-semibold text-slate-700">
-              <div className="flex items-center gap-3"><CheckCircle size={18} className="text-green-500"/> Geo-Location Calibrated</div>
-              <div className="flex items-center gap-3"><CheckCircle size={18} className="text-green-500"/> Dashboard Access Ready</div>
-              <div className="flex items-center gap-3"><CheckCircle size={18} className="text-green-500"/> Customer Booking Page Created</div>
+              <div className="flex items-center gap-3"><ShieldCheck size={18} className="text-green-500"/> Geo-Location Calibrated</div>
+              <div className="flex items-center gap-3"><ShieldCheck size={18} className="text-green-500"/> Dashboard Access Ready</div>
+              <div className="flex items-center gap-3"><ShieldCheck size={18} className="text-green-500"/> Booking Page Created</div>
             </div>
 
             <button onClick={handleFinalSubmit} disabled={loading} className="w-full bg-blue-600 text-white font-black text-xl py-6 rounded-[2rem] shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 uppercase italic">
-              {loading ? <Loader2 className="animate-spin" /> : "Make Payment Now"}
+              {loading ? <Loader2 className="animate-spin" /> : `Checkout (${selectedPlan === 'pro' ? 'Pro' : 'Solo'})`}
             </button>
             <button onClick={() => setStep(2)} className="text-slate-400 font-bold hover:text-slate-600 transition-colors uppercase text-[10px] tracking-widest">Edit Details</button>
           </div>

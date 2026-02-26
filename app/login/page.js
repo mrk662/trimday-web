@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Lock, Phone, Loader2, AlertCircle, Scissors } from "lucide-react";
+import { Lock, Phone, Loader2, AlertCircle, Scissors, ChevronLeft } from "lucide-react"; // 🔥 Added ChevronLeft
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 
@@ -36,7 +36,6 @@ export default function BarberLogin() {
         .single();
 
       if (shopOwner) {
-        // Prevent login if account isn't active/paid
         if (!shopOwner.is_active && shopOwner.subscription_status !== "active") {
            throw new Error("Subscription pending. Please complete payment.");
         }
@@ -46,23 +45,20 @@ export default function BarberLogin() {
       }
 
       // --- STEP B: CHECK FOR STAFF (BARBER) ---
-      // We check the 'barbers' table using the cleaned phone number and password
-      // (Assumes you are using email/pass for staff, but logic here matches your phone-login style)
       const { data: staffMember, error: staffError } = await supabase
         .from("barbers")
         .select("*")
         .eq("whatsapp_number", cleanNumber)
-        .eq("password_hash", password) // Ensure staff has a password column in DB
+        .eq("password_hash", password) 
         .single();
 
       if (staffMember) {
         localStorage.setItem("barberId", staffMember.id);
         localStorage.setItem("barberShopId", staffMember.shop_id);
-        window.location.href = "/dashboard/staff/view"; // Direct to their specific chair
+        window.location.href = "/dashboard/staff/view"; 
         return;
       }
 
-      // If neither found
       throw new Error("Invalid number or password.");
 
     } catch (err) {
@@ -75,6 +71,13 @@ export default function BarberLogin() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-900">
       <div className="max-w-md w-full bg-white rounded-[3rem] shadow-xl p-10 border border-slate-100 animate-in fade-in zoom-in-95 duration-500">
         
+        {/* 🔥 NEW: Home Option */}
+        <div className="mb-6 text-left">
+          <Link href="/" className="inline-flex items-center gap-1 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-900 transition-colors group">
+            <ChevronLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> Back to Home
+          </Link>
+        </div>
+
         <div className="text-center mb-10 text-left">
           <div className="bg-black text-white p-4 rounded-2xl inline-block mb-4 shadow-lg text-center">
             <Scissors size={28} />

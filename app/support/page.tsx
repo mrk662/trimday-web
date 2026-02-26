@@ -1,9 +1,10 @@
-"use client";
+"use client"; // 🔥 MUST stay on line 1
+
 import React, { useState, useEffect } from 'react';
 import { 
   LifeBuoy, ShieldCheck, CreditCard, Scissors, 
   ChevronDown, Mail, Lock, Globe, MessageCircle,
-  Users, Clock
+  Users, Clock, ChevronLeft 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,7 +22,7 @@ export default function SupportPage() {
     {
       category: "Billing & Subscriptions",
       icon: <CreditCard size={20} />,
-      barberOnly: true, // Mark this for barbers only
+      barberOnly: true,
       questions: [
         { 
           id: 1,
@@ -38,7 +39,7 @@ export default function SupportPage() {
     {
       category: "Barber Dashboard & Team",
       icon: <Users size={20} />,
-      barberOnly: true, // Mark this for barbers only
+      barberOnly: true,
       questions: [
         { 
           id: 3,
@@ -55,7 +56,7 @@ export default function SupportPage() {
     {
       category: "Booking & Clients",
       icon: <Clock size={20} />,
-      barberOnly: false, // Everyone can see this
+      barberOnly: false,
       questions: [
         { 
           id: 5,
@@ -73,7 +74,16 @@ export default function SupportPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-      <div className="bg-white border-b border-slate-200 py-16 px-6 text-center">
+      
+      {/* 🔥 FIX: Back Button moved inside the return block */}
+      <div className="max-w-4xl mx-auto px-6 pt-10">
+        <Link href="/" className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-2xl hover:bg-slate-100 transition-all group shadow-sm border border-slate-100">
+          <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">Back to TrimDay</span>
+        </Link>
+      </div>
+
+      <div className="bg-slate-50 py-12 px-6 text-center">
         <div className="max-w-3xl mx-auto">
           <div className="bg-blue-100 text-blue-600 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <LifeBuoy size={32} />
@@ -94,7 +104,6 @@ export default function SupportPage() {
             <a href="mailto:support@trimday.com" className="text-blue-600 font-black hover:underline underline-offset-4 block text-left uppercase italic">support@trimday.com</a>
           </div>
           
-          {/* ONLY SHOWN TO LOGGED IN BARBERS */}
           {isBarber && (
             <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl border-4 border-slate-800">
               <CreditCard className="text-blue-400 mb-4" size={28} />
@@ -112,7 +121,6 @@ export default function SupportPage() {
           </h2>
           
           {faqData.map((section, sIdx) => {
-            // Filter out barber sections if user is a regular client
             if (section.barberOnly && !isBarber) return null;
 
             return (
@@ -150,7 +158,7 @@ export default function SupportPage() {
           })}
         </section>
 
-        {/* Security Section (Visible to Everyone) */}
+        {/* Security Section */}
         <section className="bg-blue-600 text-white rounded-[3rem] p-10 shadow-2xl relative overflow-hidden">
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-6">
@@ -177,10 +185,6 @@ export default function SupportPage() {
           </div>
           <ShieldCheck size={200} className="absolute -bottom-10 -right-10 text-white/5 rotate-12" />
         </section>
-
-        <div className="text-center">
-          <Link href="/" className="text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors italic">← Back to Home</Link>
-        </div>
       </div>
     </div>
   );

@@ -121,6 +121,10 @@ export default function StaffGoldenDashboard() {
         if (soundEnabled && payload.eventType === 'INSERT') bookingAudio.current.play().catch(() => {});
         fetchBookings(bId, sId);
       })
+      // 🔥 ADDED: Real-time update listener so dashboard flips from "Rescheduled" to "Confirmed" instantly
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
+        fetchBookings(bId, sId);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'barbers', filter: `id=eq.${bId}` }, (payload) => {
         setBarber(payload.new); 
       })
@@ -226,8 +230,13 @@ export default function StaffGoldenDashboard() {
   const handleReschedule = async () => {
     if (!newTimeInput || !reschedulingBooking) return;
     
-    await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
+    // Set status to rescheduled and save proposed time
+    await supabase.from("bookings").update({ 
+      status: 'rescheduled', 
+      proposed_time: newTimeInput 
+    }).eq("id", reschedulingBooking.id);
     
+    // 🔥 Trigger API notification for customer to Accept/Decline
     await fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -284,20 +293,9 @@ export default function StaffGoldenDashboard() {
         {shop?.shop_photo_url && <img src={shop.shop_photo_url} className="w-full h-full object-cover opacity-40 grayscale-[0.5]" alt="Shop" />}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent" />
         
-        {/* Header Actions */}
         <div className="absolute top-6 right-6 z-20 flex gap-3">
-          <button 
-            onClick={() => setShowQrModal(true)} 
-            className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl"
-          >
-            <QrCode size={20} />
-          </button>
-          <button 
-            onClick={handleLogout} 
-            className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl"
-          >
-            <LogOut size={20} />
-          </button>
+          <button onClick={() => setShowQrModal(true)} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl"><QrCode size={20} /></button>
+          <button onClick={handleLogout} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl"><LogOut size={20} /></button>
         </div>
       </div>
 
@@ -306,17 +304,13 @@ export default function StaffGoldenDashboard() {
 
         <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex justify-between items-center mb-10">
           <div className="flex items-center gap-4">
-            {shop?.shop_photo_url ? (
-              <img src={shop.shop_photo_url} className="w-16 h-16 rounded-[1.5rem] object-cover border-2 border-slate-100 shadow-md" alt="Logo" />
-            ) : (
-              <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-lg transition-all ${
-                barber?.is_available_today ? 'bg-green-500 shadow-green-200' : 'bg-slate-400 shadow-slate-200'
-              }`}>
-                {barber?.name?.charAt(0)}
-              </div>
-            )}
+            <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-lg transition-all ${
+              barber?.is_available_today ? 'bg-green-500 shadow-green-200' : 'bg-slate-400 shadow-slate-200'
+            }`}>
+              {barber?.name?.charAt(0)}
+            </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 leading-none uppercase italic">
                 {barber?.name}
                 <span className={`w-2 h-2 rounded-full animate-pulse ${barber?.is_available_today ? 'bg-green-500' : 'bg-red-500'}`} />
               </h1>
@@ -342,26 +336,26 @@ export default function StaffGoldenDashboard() {
           </div>
         </div>
 
-        <button onClick={() => setShowWalkInMenu(true)} className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all mb-10 flex items-center justify-center gap-3">
+        <button onClick={() => setShowWalkInMenu(true)} className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all mb-10 flex items-center justify-center gap-3 uppercase italic">
           <Scissors size={24} /> Add Walk-In Now
         </button>
 
         <section className="mb-10">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2 italic">
             <Activity size={14} className="text-blue-600" /> Unclaimed Pings ({broadcast.length})
           </h2>
           <div className="space-y-4">
             {broadcast.map(b => (
               <div key={b.id} className="p-6 bg-blue-600 text-white rounded-[2.5rem] flex justify-between items-center shadow-xl border-4 border-blue-400 animate-in slide-in-from-top-4">
                 <div>
-                  <p className="font-black text-xl leading-tight">{b.client_name}</p>
+                  <p className="font-black text-xl leading-tight uppercase italic">{b.client_name}</p>
                   <p className="text-xs font-bold opacity-80 mt-1">
                     {b.status === 'unverified' ? '⏳ Email Pending' : `${b.service_name} • ${b.booking_time}`}
                   </p>
                 </div>
                 <button 
                   onClick={() => claimBooking(b.id)} 
-                  className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all"
+                  className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic"
                 >
                   Claim
                 </button>
@@ -371,7 +365,7 @@ export default function StaffGoldenDashboard() {
         </section>
 
         <section>
-          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 ml-4 flex items-center gap-2 italic">
             <Calendar size={14} className="text-blue-600" /> My Schedule Today
           </h2>
           <div className="space-y-4">
@@ -379,43 +373,56 @@ export default function StaffGoldenDashboard() {
               <div className="py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100 font-black text-slate-200 uppercase text-[10px] tracking-widest italic">No trims yet</div>
             ) : (
               myBookings.map(b => (
-                <div key={b.id} className="p-6 bg-white rounded-[2.5rem] border border-slate-100 flex flex-col gap-4 shadow-sm group hover:shadow-md transition-all">
+                <div key={b.id} className={`p-6 rounded-[2.5rem] border flex flex-col gap-4 shadow-sm transition-all ${
+                  b.status === 'rescheduled' ? 'bg-blue-600/5 border-blue-500/30 border-dashed' : 'bg-white border-slate-100'
+                }`}>
                    <div className="flex justify-between items-center">
                       <div className="flex gap-4 items-center">
-                        <div className={`p-4 rounded-2xl min-w-[85px] text-center ${b.status === 'unverified' ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-slate-900 text-white'}`}>
-                          <span className="font-black text-xs">{b.booking_time.split(' ')[0]}</span>
+                        <div className={`p-4 rounded-2xl min-w-[85px] text-center ${
+                          b.status === 'unverified' ? 'bg-amber-100 text-amber-600 border border-amber-200' : 
+                          b.status === 'rescheduled' ? 'bg-orange-500 text-white animate-pulse' : 
+                          'bg-slate-900 text-white'
+                        }`}>
+                          <span className="font-black text-xs">{
+                            b.status === 'rescheduled' ? <Clock size={16} className="mx-auto" /> : 
+                            b.booking_time.split(' ')[0]
+                          }</span>
                         </div>
                         <div>
-                          <p className="font-black text-xl text-slate-900">{b.client_name}</p>
+                          <p className={`font-black text-xl uppercase italic ${b.status === 'rescheduled' ? 'text-blue-600' : 'text-slate-900'}`}>{b.client_name}</p>
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            {b.status === 'unverified' ? '⏳ Awaiting Verify' : b.service_name}
+                            {b.status === 'unverified' ? '⏳ Awaiting Verify' : 
+                             b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : 
+                             b.service_name}
                           </p>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        {(b.status === 'pending' || b.status === 'unverified' || b.status === 'rescheduled') ? (
-                          <button 
-                            onClick={() => updateStatus(b.id, 'confirmed')} 
-                            className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all"
-                          >
-                            Accept
-                          </button>
-                        ) : (
+                        {b.status === 'confirmed' ? (
                           <button 
                             onClick={() => updateStatus(b.id, 'completed')} 
                             className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all"
                           >
                             <CheckCircle size={24} />
                           </button>
+                        ) : b.status === 'rescheduled' ? (
+                          <div className="bg-blue-100 text-blue-600 p-4 rounded-2xl"><RefreshCcw size={20} className="animate-spin" /></div>
+                        ) : (
+                          <button 
+                            onClick={() => updateStatus(b.id, 'confirmed')} 
+                            className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic"
+                          >
+                            Accept
+                          </button>
                         )}
                       </div>
                    </div>
 
                    <div className="flex gap-2 pt-2 border-t border-slate-50">
-                      <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white">
+                      <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white italic">
                         <XCircle size={14}/> Cancel
                       </button>
-                      <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200">
+                      <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic">
                         <RefreshCcw size={14}/> Change
                       </button>
                       <a href={`tel:${b.client_phone}`} className="p-3 bg-slate-900 text-white rounded-xl active:scale-90 transition-transform">
@@ -441,7 +448,7 @@ export default function StaffGoldenDashboard() {
             
             <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-8">
               <QRCodeSVG 
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.id}`}
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.slug || shop?.id}`}
                 size={220}
                 level="H"
                 includeMargin={false}
@@ -453,6 +460,7 @@ export default function StaffGoldenDashboard() {
         </div>
       )}
 
+      {/* WALK-IN MENU */}
       {showWalkInMenu && (
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95">
@@ -460,7 +468,7 @@ export default function StaffGoldenDashboard() {
             <div className="grid gap-3">
               {(shop?.service_menu || []).map((s, idx) => (
                 <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group">
-                  <div className="text-left"><p className="font-black text-xl">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
+                  <div className="text-left"><p className="font-black text-xl uppercase italic">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
                   <span className="text-blue-600 group-hover:text-blue-700 text-2xl italic font-black">£{s.price}</span>
                 </button>
               ))}
@@ -470,13 +478,15 @@ export default function StaffGoldenDashboard() {
         </div>
       )}
 
+      {/* RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-6 tracking-tight text-center">Change Time</h3>
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-center uppercase italic">Change Time</h3>
+            <p className="text-[10px] font-bold text-slate-400 text-center uppercase mb-6 tracking-widest italic">Suggesting to {reschedulingBooking.client_name}</p>
             <div className="relative mb-6">
               <select 
-                className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center" 
+                className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center uppercase italic" 
                 value={newTimeInput} 
                 onChange={(e) => setNewTimeInput(e.target.value)}
               >
@@ -486,13 +496,13 @@ export default function StaffGoldenDashboard() {
               <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-center">
-              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center">Cancel</button>
+              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest text-center italic">Cancel</button>
               <button 
                 onClick={handleReschedule} 
                 disabled={!newTimeInput} 
-                className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center active:scale-95 transition-all"
+                className="py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl tracking-widest text-center active:scale-95 transition-all italic disabled:opacity-50"
               >
-                Send Change
+                Send Request
               </button>
             </div>
           </div>

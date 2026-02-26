@@ -5,7 +5,8 @@ import {
   MapPin, LogOut, CheckCircle, XCircle, MessageSquare, 
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
-  CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock
+  CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock,
+  AlertTriangle 
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -28,6 +29,27 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
   const min = i % 2 === 0 ? "00" : "30";
   return `${hour.toString().padStart(2, '0')}:${min}`;
 });
+
+// 🔥 Default Hours helper
+const DEFAULT_HOURS = {
+  mon: { open: "09:00", close: "18:00", is_closed: false },
+  tue: { open: "09:00", close: "18:00", is_closed: false },
+  wed: { open: "09:00", close: "18:00", is_closed: false },
+  thu: { open: "09:00", close: "20:00", is_closed: false },
+  fri: { open: "09:00", close: "18:00", is_closed: false },
+  sat: { open: "09:00", close: "17:00", is_closed: false },
+  sun: { open: "09:00", close: "17:00", is_closed: true },
+};
+
+// --- NEW INITIALS AVATAR COMPONENT ---
+const Avatar = ({ name, offline = false }) => {
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  return (
+    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 border-white shadow-sm shrink-0 ${offline ? 'bg-slate-200 grayscale' : 'bg-slate-900'}`}>
+      <span className={`font-black italic text-[10px] tracking-tighter ${offline ? 'text-slate-400' : 'text-white'}`}>{initials}</span>
+    </div>
+  );
+};
 
 function PwaPrompt() {
   const [show, setShow] = useState(true);
@@ -115,10 +137,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
     }`}>
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-left">
-          <div className={`${isUrgent ? 'bg-red-600' : 'bg-slate-900'} text-white p-4 rounded-3xl flex flex-col items-center min-w-[100px]`}>
-            <span className="text-[10px] font-black uppercase opacity-60">{isWalkIn ? "Active" : "Timer"}</span>
-            <span className="text-xl font-black">{isWalkIn ? "NOW" : `${mins}:${secs < 10 ? `0${secs}` : secs}`}</span>
-          </div>
+          <Avatar name={b.client_name || "W"} />
           <div>
             <h3 className="text-2xl font-black text-slate-900 leading-tight">{b.client_name || "Walk-in"}</h3>
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
@@ -164,6 +183,8 @@ export default function BarberDashboard() {
   const [showSoundSettings, setShowSoundSettings] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk");
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
   
   const [isEditingSettings, setIsEditingSettings] = useState(false);
   const [shopSettings, setShopSettings] = useState({
@@ -172,6 +193,8 @@ export default function BarberDashboard() {
     google_review_url: "",
     business_phone: "",
   });
+
+  const [businessHours, setBusinessHours] = useState(DEFAULT_HOURS);
 
   const soundEnabledRef = useRef(soundEnabled);
 
@@ -252,11 +275,14 @@ export default function BarberDashboard() {
           fetchBookings(shopId);
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, (payload) => {
+          if (payload.new && String(payload.new.shop_id) === String(shopId)) fetchBookings(shopId);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'barbers' }, (payload) => {
-         if (payload.new && String(payload.new.shop_id) === String(shopId)) fetchBarbers(shopId);
+          if (payload.new && String(payload.new.shop_id) === String(shopId)) fetchBarbers(shopId);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shops' }, (payload) => {
-         if (payload.new && String(payload.new.id) === String(shopId)) setShop(payload.new);
+          if (payload.new && String(payload.new.id) === String(shopId)) setShop(payload.new);
       })
       .subscribe();
 
@@ -291,6 +317,7 @@ export default function BarberDashboard() {
     if (shopData) {
       setMenuItems(shopData.service_menu || DEFAULT_SERVICES);
       setShop(shopData);
+      setBusinessHours(shopData.business_hours || DEFAULT_HOURS);
       setShopSettings({
         name: shopData.name || "",
         shop_photo_url: shopData.shop_photo_url || "",
@@ -317,7 +344,7 @@ export default function BarberDashboard() {
 
     setAllTodayBookings(data || []);
     setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
-    setConfirmedSchedule(data?.filter(b => b.status === "confirmed") || []);
+    setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
   };
 
   const calculateRevenue = () => {
@@ -375,7 +402,6 @@ export default function BarberDashboard() {
     }
   };
 
-  // --- FIXED SAVE FUNCTION ---
   const saveSettings = async () => {
     if (!shop?.id) return;
 
@@ -385,7 +411,8 @@ export default function BarberDashboard() {
         name: shopSettings.name,
         shop_photo_url: shopSettings.shop_photo_url,
         google_review_url: shopSettings.google_review_url,
-        business_phone: shopSettings.business_phone
+        business_phone: shopSettings.business_phone,
+        business_hours: businessHours 
       })
       .eq("id", shop.id);
 
@@ -393,13 +420,12 @@ export default function BarberDashboard() {
       console.error("Supabase Save Error:", error);
       alert(`Save failed: ${error.message}`);
     } else {
-      setShop({ ...shop, ...shopSettings });
+      setShop({ ...shop, ...shopSettings, business_hours: businessHours });
       setIsEditingSettings(false);
       alert("Settings updated successfully!");
     }
   };
 
-  // --- UPDATED: BENEFIT SUMMARY UPSELL ---
   const handleTeamClick = (e) => {
     if (shop?.subscription_tier !== 'pro') {
       e.preventDefault();
@@ -421,6 +447,10 @@ export default function BarberDashboard() {
   };
 
   const toggleBarberStatus = async (id, currentStatus) => {
+    if (shop?.subscription_tier !== 'pro' && barbers.length > 1) {
+        alert("Upgrade to PRO to manage team availability.");
+        return;
+    }
     await supabase.from("barbers").update({ is_available_today: !currentStatus }).eq("id", id);
     fetchBarbers(shop.id);
   };
@@ -535,40 +565,18 @@ export default function BarberDashboard() {
                    {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
                 </button>
                 
-                <button onClick={() => setIsEditingSettings(true)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-all">
+                <div className="flex flex-col items-center gap-2 group">
+                  <button onClick={() => setIsEditingSettings(true)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm group-hover:shadow-md">
                     <Settings size={24} />
-                </button>
-
-                {showSoundSettings && (
-                    <div className="absolute top-16 left-0 w-64 bg-white border border-slate-100 shadow-2xl rounded-3xl p-4 z-50">
-                        <div className="mb-5 bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center shadow-inner">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic mb-1">Today's Revenue</p>
-                            <p className="text-2xl font-black text-blue-600">£{calculateRevenue()}</p>
-                        </div>
-
-                        <p className="text-[10px] font-black uppercase text-slate-400 mb-3 ml-2 tracking-widest italic">Alert Sound</p>
-                        <div className="space-y-2">
-                            {['ping1', 'ping2', 'ping3'].map((sound) => (
-                                <button key={sound} onClick={() => {
-                                    setSelectedSound(sound);
-                                    setTimeout(() => {
-                                      const audioEl = document.getElementById("bookingAlert");
-                                      if (audioEl) { audioEl.volume = 1; audioEl.currentTime = 0; audioEl.play().catch(() => {}); }
-                                    }, 50);
-                                }} className={`w-full text-left px-4 py-3 rounded-xl font-black text-xs uppercase transition-all flex items-center justify-between ${selectedSound === sound ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
-                                    {sound.replace('ping', 'Alert ')}
-                                    {selectedSound === sound && <CheckCircle size={14} />}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                  </button>
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest italic">Shop Setup</span>
+                </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
             <Link 
-              href="/dashboard/staff" 
+              href={shop?.subscription_tier === 'pro' ? "/dashboard/staff" : "#"} 
               onClick={handleTeamClick}
               className={`flex items-center justify-center gap-2 px-4 py-5 rounded-2xl font-black text-[10px] uppercase transition-all text-center relative overflow-hidden group ${
                 shop?.subscription_tier === 'pro' 
@@ -616,18 +624,33 @@ export default function BarberDashboard() {
                   <p className="text-center py-6 text-slate-500 font-bold italic text-xs uppercase tracking-widest">No confirmed trims yet</p>
                 ) : (
                   confirmedSchedule.map((b) => (
-                    <div key={b.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white/5 rounded-[2rem] border border-white/10 mb-3">
+                    <div key={b.id} className={`flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[2rem] border transition-all mb-3 ${
+                      b.status === 'rescheduled' ? 'bg-blue-600/10 border-blue-500/40 border-dashed' : 'bg-white/5 border-white/10'
+                    }`}>
                       <div className="flex items-center gap-4 mb-4 md:mb-0">
-                        <div className="bg-blue-600 p-3 rounded-2xl text-center min-w-[80px]"><span className="block text-xs font-black">{b.booking_time}</span></div>
+                        <div className={`${b.status === 'rescheduled' ? 'bg-orange-500 animate-pulse' : 'bg-blue-600'} p-3 rounded-2xl text-center min-w-[80px]`}>
+                           {b.status === 'rescheduled' ? <Clock size={16} className="mx-auto" /> : <span className="block text-xs font-black">{b.booking_time}</span>}
+                        </div>
                         <div className="truncate">
-                          <p className="font-black text-lg">{b.client_name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{b.barber_name || "Any Barber"} • {b.service_name}</p>
+                          <p className={`font-black text-lg ${b.status === 'rescheduled' ? 'text-blue-400' : 'text-white'}`}>{b.client_name}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                            {b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : `${b.barber_name || "Any Barber"} • ${b.service_name}`}
+                          </p>
                         </div>
                       </div>
                       <div className="flex gap-2 justify-end">
-                        <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg"><Phone size={20}/></a>
-                        <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20"><XCircle size={22} /></button>
-                        <button onClick={() => updateBookingStatus(b, 'completed')} className="p-4 bg-green-500 rounded-2xl text-white hover:bg-green-400 transition-all shadow-lg border border-green-400"><CheckCircle size={22} strokeWidth={3} /></button>
+                        {b.status === 'confirmed' ? (
+                          <>
+                            <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg"><Phone size={20}/></a>
+                            <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20"><XCircle size={22} /></button>
+                            <button onClick={() => updateBookingStatus(b, 'completed')} className="p-4 bg-green-500 rounded-2xl text-white hover:bg-green-400 transition-all shadow-lg border border-green-400"><CheckCircle size={22} strokeWidth={3} /></button>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                             <span className="hidden md:block px-4 py-2 bg-blue-600 text-white rounded-full font-black text-[9px] uppercase italic tracking-widest animate-bounce">Pending Client Approval</span>
+                             <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/20 text-red-500 rounded-2xl font-black text-[9px] uppercase italic hover:bg-red-500 hover:text-white transition-all">Cancel</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -637,17 +660,19 @@ export default function BarberDashboard() {
           </div>
 
           <div className="space-y-8 w-full">
-            {/* STAFF ON DUTY SECTION */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-8 flex items-center gap-2 uppercase italic tracking-tighter"><User className="text-blue-600" /> Staff on Duty</h2>
               <div className="space-y-4">
                 {barbers.map(barber => {
                   const isBusy = confirmedSchedule.some(b => b.barber_id === barber.id);
                   return (
-                    <div key={barber.id} className={`flex items-center justify-between p-4 rounded-[1.5rem] border transition-all ${isBusy ? 'bg-blue-50 border-blue-100 shadow-inner' : 'bg-slate-50 border-transparent hover:border-blue-100'}`}>
-                      <div className="flex-1 pr-2">
-                        <p className="font-black text-slate-900 flex items-center gap-2 leading-none">{barber.name} {isBusy && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}</p>
-                        <p className={`text-[9px] font-black uppercase tracking-tighter mt-1 ${barber.is_available_today ? 'text-green-500' : 'text-red-500'}`}>{barber.is_available_today ? 'Available' : 'Off Duty'}</p>
+                    <div key={barber.id} className={`flex items-center justify-between p-4 rounded-[1.5rem] border transition-all ${!barber.is_available_today ? 'bg-slate-50 opacity-60 grayscale' : isBusy ? 'bg-blue-50 border-blue-100 shadow-inner' : 'bg-slate-50 border-transparent hover:border-blue-100'}`}>
+                      <div className="flex items-center gap-3 pr-2">
+                        <Avatar name={barber.name} offline={!barber.is_available_today} />
+                        <div>
+                          <p className="font-black text-slate-900 flex items-center gap-2 leading-none">{barber.name} {isBusy && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}</p>
+                          <p className={`text-[9px] font-black uppercase tracking-tighter mt-1 ${barber.is_available_today ? 'text-green-500' : 'text-red-500'}`}>{barber.is_available_today ? 'Available' : 'Off Duty'}</p>
+                        </div>
                       </div>
                       <button onClick={() => toggleBarberStatus(barber.id, barber.is_available_today)} className={`p-3 rounded-xl transition-all shadow-sm ${barber.is_available_today ? 'bg-green-500 text-white' : 'bg-red-100 text-red-500'}`}><Power size={18} /></button>
                     </div>
@@ -656,75 +681,95 @@ export default function BarberDashboard() {
               </div>
             </section>
 
-            {/* MARKETING QR SECTION */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
-              
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
-                <QRCode 
-                  id="shop-qr"
-                  value={`${baseUrl}/shop/${shop?.slug}`} 
-                  size={160}
-                  qrStyle="dots"
-                  eyeRadius={10}
-                  logoImage="/icon.png"
-                  logoWidth={35}
-                  logoHeight={35}
-                  bgColor="#f8fafc" 
-                  fgColor="#0f172a" 
-                  quietZone={25} 
-                />
+                <QRCode id="shop-qr" value={`${baseUrl}/shop/${shop?.slug}`} size={160} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={35} logoHeight={35} bgColor="#f8fafc" fgColor="#0f172a" quietZone={25} />
                 <p className="mt-4 text-[10px] font-black text-slate-900 uppercase italic">Scan to book</p>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => downloadQR("shop-qr", `${shop?.name || 'Shop'}-Booking-QR`)}
-                  className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"
-                >
-                  <Download size={14} /> Download
-                </button>
-                <button 
-                  onClick={shareWhatsApp}
-                  className="flex items-center justify-center gap-2 bg-green-500 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-green-600 transition-all shadow-lg"
-                >
-                  <MessageCircle size={14} /> WhatsApp
-                </button>
+                <button onClick={() => downloadQR("shop-qr", `${shop?.name || 'Shop'}-Booking-QR`)} className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"><Download size={14} /> Download</button>
+                <button onClick={shareWhatsApp} className="flex items-center justify-center gap-2 bg-green-500 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-green-600 transition-all shadow-lg"><MessageCircle size={14} /> WhatsApp</button>
               </div>
             </section>
           </div>
         </div>
       </div>
 
-      {/* SHOP SETTINGS MODAL - CLEAN & FIXED VERSION */}
+      {/* SHOP SETTINGS MODAL */}
       {isEditingSettings && (
         <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Shop Settings</h3>
-              <button onClick={() => setIsEditingSettings(false)} className="text-slate-400 hover:text-slate-900 transition-colors"><X size={24} /></button>
+            
+            <div className="mb-10 text-left">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">Shop Setup</h3>
+                <button onClick={() => setIsEditingSettings(false)} className="text-slate-400 hover:text-slate-900 transition-colors">
+                  <X size={28} />
+                </button>
+              </div>
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed">
+                Manage your shop's identity, contact details, and opening hours. These changes update your public booking page instantly.
+              </p>
             </div>
             
             <div className="space-y-6 text-left">
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Shop Name</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest italic">Shop Name</label>
                 <input type="text" value={shopSettings.name} onChange={(e) => setShopSettings({...shopSettings, name: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Logo URL</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest italic">Logo URL</label>
                 <input type="text" placeholder="https://..." value={shopSettings.shop_photo_url} onChange={(e) => setShopSettings({...shopSettings, shop_photo_url: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Business Phone Number</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest italic">Business Phone Number</label>
                 <input type="text" placeholder="07123..." value={shopSettings.business_phone} onChange={(e) => setShopSettings({...shopSettings, business_phone: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Google Review Link</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest italic">Google Review Link</label>
                 <input type="text" placeholder="https://g.page/r/..." value={shopSettings.google_review_url} onChange={(e) => setShopSettings({...shopSettings, google_review_url: e.target.value})} className="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold border border-transparent focus:border-blue-600 transition-all text-slate-900" />
+              </div>
+
+              {/* Opening Hours */}
+              <div className="mt-8 space-y-4">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic ml-2 mb-4">Opening Hours</h4>
+                {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => (
+                  <div key={day} className="flex items-center justify-between bg-slate-50 p-4 rounded-[1.5rem] border border-slate-100">
+                    <span className="font-black uppercase text-xs w-12 text-slate-900">{day}</span>
+                    <div className="flex items-center gap-3">
+                      {!businessHours[day]?.is_closed ? (
+                        <>
+                          <input 
+                            type="time" 
+                            value={businessHours[day]?.open || "09:00"} 
+                            onChange={(e) => setBusinessHours({...businessHours, [day]: {...businessHours[day], open: e.target.value}})}
+                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600"
+                          />
+                          <span className="text-slate-300 font-bold">-</span>
+                          <input 
+                            type="time" 
+                            value={businessHours[day]?.close || "18:00"} 
+                            onChange={(e) => setBusinessHours({...businessHours, [day]: {...businessHours[day], close: e.target.value}})}
+                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600"
+                          />
+                        </>
+                      ) : (
+                        <span className="text-red-500 font-black text-[10px] uppercase italic bg-red-50 px-4 py-2 rounded-xl">Closed</span>
+                      )}
+                      <button 
+                        onClick={() => setBusinessHours({...businessHours, [day]: {...businessHours[day], is_closed: !businessHours[day]?.is_closed}})}
+                        className={`p-3 rounded-xl transition-all ${businessHours[day]?.is_closed ? 'bg-green-100 text-green-600' : 'bg-red-50 text-red-500'}`}
+                      >
+                        <Power size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -738,7 +783,7 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* REMAINDER OF FILE: MENU & RESCHEDULE MODALS */}
+      {/* SERVICE MENU MODAL */}
       {isEditingMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
@@ -749,9 +794,17 @@ export default function BarberDashboard() {
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-4 mb-8">
               {menuItems.map((item, idx) => (
                 <div key={idx} className="flex gap-3 items-end bg-slate-50 p-4 rounded-[2rem] border border-transparent hover:border-blue-100 transition-all">
-                  <div className="flex-1 text-left"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Service Name</label><input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" /></div>
-                  <div className="w-24 text-left"><label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Price £</label><input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" /></div>
-                  <button onClick={() => setMenuItems(menuItems.filter((_, i) => i !== idx))} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 size={18}/></button>
+                  <div className="flex-1 text-left">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Service Name</label>
+                    <input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" />
+                  </div>
+                  <div className="w-24 text-left">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Price £</label>
+                    <input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" />
+                  </div>
+                  <button onClick={() => setDeleteTarget(idx)} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                    <Trash2 size={18}/>
+                  </button>
                 </div>
               ))}
             </div>
@@ -763,6 +816,40 @@ export default function BarberDashboard() {
         </div>
       )}
 
+      {/* SAFETY NET DELETE MODAL */}
+      {deleteTarget !== null && (
+        <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="text-red-500" size={40} />
+            </div>
+            <h3 className="text-2xl font-black italic uppercase tracking-tighter text-slate-900 leading-none mb-3">Wait. Are you sure?</h3>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed mb-8 text-center">
+              This will remove <span className="text-slate-900">"{menuItems[deleteTarget]?.name}"</span> from your menu permanently.
+            </p>
+            
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => {
+                  setMenuItems(menuItems.filter((_, i) => i !== deleteTarget));
+                  setDeleteTarget(null);
+                }} 
+                className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase italic shadow-lg shadow-red-200 active:scale-95 transition-all"
+              >
+                Yes, Delete It
+              </button>
+              <button 
+                onClick={() => setDeleteTarget(null)} 
+                className="w-full bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WALK-IN MENU */}
       {showServiceMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95">
@@ -780,10 +867,12 @@ export default function BarberDashboard() {
         </div>
       )}
 
+      {/* 🔥 RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900">Change Time</h3>
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900 uppercase italic">Change Time</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 italic">Suggest a new slot to {reschedulingBooking.client_name}</p>
             <div className="relative mb-6">
               <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-slate-900" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
                 <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -791,10 +880,13 @@ export default function BarberDashboard() {
               <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center">Cancel</button>
+              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center italic">Cancel</button>
               <button onClick={async () => {
                 if (!newTimeInput) return;
+                
                 await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
+                
+                // Trigger notification with the new link
                 await fetch('/api/notify', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -803,8 +895,11 @@ export default function BarberDashboard() {
                     type: 'rescheduled' 
                   }),
                 });
-                setReschedulingBooking(null); setNewTimeInput(""); fetchBookings(shop.id);
-              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center">Send</button>
+                
+                setReschedulingBooking(null); 
+                setNewTimeInput(""); 
+                fetchBookings(shop.id);
+              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center disabled:opacity-50 italic">Send Request</button>
             </div>
           </div>
         </div>

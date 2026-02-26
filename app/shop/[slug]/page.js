@@ -2,7 +2,7 @@
 import React, { useEffect, useState, use } from "react";
 import { 
   MapPin, Globe, MessageSquare, Calendar, Loader2, 
-  Clock, ChevronRight, Info 
+  Clock, ChevronRight, Info, ChevronDown // Added ChevronDown for hours list
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -23,6 +23,7 @@ export default function PublicShopPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+  const [showAllHours, setShowAllHours] = useState(false); // 🔥 State for dropdown
 
   useEffect(() => {
     if (slug) {
@@ -55,28 +56,59 @@ export default function PublicShopPage({ params }) {
     setLoading(false);
   };
 
+  // --- 🔥 NEW HELPER: Logic to check if shop is open right now ---
+  const checkIsScheduledOpen = () => {
+    if (!shop?.business_hours) return true; // Default to open if hours not set yet
+    
+    const now = new Date();
+    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const todayKey = days[now.getDay()];
+    const todayHours = shop.business_hours[todayKey];
+
+    if (!todayHours || todayHours.is_closed) return false;
+
+    const currentTimeInMins = now.getHours() * 60 + now.getMinutes();
+    const [openH, openM] = todayHours.open.split(':').map(Number);
+    const [closeH, closeM] = todayHours.close.split(':').map(Number);
+    
+    const openTimeInMins = openH * 60 + openM;
+    const closeTimeInMins = closeH * 60 + closeM;
+
+    return currentTimeInMins >= openTimeInMins && currentTimeInMins < closeTimeInMins;
+  };
+
+  // Combined logic: Manual toggle + Schedule check
+  const isActuallyOpen = shop?.is_open && checkIsScheduledOpen();
+
   const handleBookService = (service) => {
-    if (!shop.is_open) return;
+    if (!isActuallyOpen) return;
     setSelectedService(service);
     setIsBookingOpen(true);
   };
 
   const handleGenericBook = () => {
+    if (!isActuallyOpen) return;
     setSelectedService(null);
     setIsBookingOpen(true);
   };
 
   const getStatusBadge = () => {
+    // 1. Check manual toggle
     if (!shop.is_open) return <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2">● Shop Closed</span>;
+    
+    // 2. Check automated schedule
+    if (!checkIsScheduledOpen()) return <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2">● Currently Closed</span>;
+
+    // 3. Check busy status
     if (shop.current_status === 'booked out') return <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2">● Booked Out</span>;
     if (shop.current_status === 'with client') return <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2">● Busy (With Client)</span>;
+    
     return <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2">● Available Now</span>;
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
   if (!shop) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-400">Shop not found.</div>;
 
-  // FORMATTING: Ensures WhatsApp link is clean of spaces/dashes
   const cleanPhone = shop.whatsapp_number?.replace(/\D/g, '');
   const whatsappMsg = encodeURIComponent(`Hi ${shop.name}! I saw your shop on Trimday.`);
 
@@ -97,10 +129,33 @@ export default function PublicShopPage({ params }) {
         {/* 2. HEADER CARD */}
         <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 p-8 border border-slate-50 mb-8 text-center">
           <div className="flex justify-center mb-4">{getStatusBadge()}</div>
-          <h1 className="text-4xl font-black tracking-tight mb-2 text-center">{shop.name}</h1>
+          <h1 className="text-4xl font-black tracking-tight mb-2 text-center uppercase italic leading-none">{shop.name}</h1>
           <p className="flex items-center justify-center gap-2 text-slate-500 font-bold text-sm text-center">
             <MapPin size={16} className="text-red-500" /> {shop.address}, {shop.postcode}
           </p>
+
+          {/* 🔥 NEW: Opening Hours Dropdown */}
+          <div className="flex flex-col items-center border-t border-slate-50 pt-4 mt-4">
+            <button 
+                onClick={() => setShowAllHours(!showAllHours)}
+                className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1 hover:text-blue-600 transition-colors"
+            >
+              View Opening Hours <ChevronDown size={14} className={`transition-transform ${showAllHours ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showAllHours && shop.business_hours && (
+              <div className="mt-4 w-full max-w-xs space-y-2 animate-in fade-in slide-in-from-top-2">
+                {Object.entries(shop.business_hours).map(([day, hrs]) => (
+                  <div key={day} className="flex justify-between text-[11px] font-bold uppercase tracking-wider">
+                    <span className="text-slate-400">{day}</span>
+                    <span className={hrs.is_closed ? "text-red-400 italic" : "text-slate-900"}>
+                      {hrs.is_closed ? 'Closed' : `${hrs.open} - ${hrs.close}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-center gap-3 mt-6">
             <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="bg-[#25D366] text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg shadow-green-100"><MessageSquare size={20} /></a>
@@ -112,25 +167,25 @@ export default function PublicShopPage({ params }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 text-left">
           <button 
             onClick={handleGenericBook}
-            disabled={!shop.is_open}
-            className="flex-1 bg-black text-white font-black py-6 rounded-[2rem] shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:grayscale flex items-center justify-center gap-3 text-xl"
+            disabled={!isActuallyOpen}
+            className="flex-1 bg-black text-white font-black py-6 rounded-[2rem] shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:grayscale flex items-center justify-center gap-3 text-xl uppercase italic"
           >
-            <Calendar /> {shop.is_open ? "Book Online" : "Currently Closed"}
+            <Calendar /> {isActuallyOpen ? "Book Online" : "Currently Closed"}
           </button>
 
-          <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="flex-1 bg-[#25D366] text-white font-black py-6 rounded-[2rem] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3 text-xl">
+          <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="flex-1 bg-[#25D366] text-white font-black py-6 rounded-[2rem] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3 text-xl uppercase italic">
             <MessageSquare /> WhatsApp
           </a>
         </div>
 
         {/* 4. SERVICE MENU */}
         <div className="mb-10 text-left">
-          <h3 className="font-black text-xl mb-6 flex items-center gap-2 text-left">Select Service</h3>
+          <h3 className="font-black text-xl mb-6 flex items-center gap-2 text-left uppercase italic tracking-tighter">Select Service</h3>
           <div className="grid gap-3 text-left">
             {(shop.service_menu || []).map((service, idx) => (
-              <button key={idx} onClick={() => handleBookService(service)} disabled={!shop.is_open} className="w-full group bg-white border-2 border-slate-50 rounded-3xl p-5 hover:border-blue-600 transition-all active:scale-95 flex items-center justify-between text-left disabled:opacity-50">
+              <button key={idx} onClick={() => handleBookService(service)} disabled={!isActuallyOpen} className="w-full group bg-white border-2 border-slate-50 rounded-3xl p-5 hover:border-blue-600 transition-all active:scale-95 flex items-center justify-between text-left disabled:opacity-50">
                   <div className="text-left">
-                    <h4 className="font-black text-lg group-hover:text-blue-600 text-left">{service.name}</h4>
+                    <h4 className="font-black text-lg group-hover:text-blue-600 text-left uppercase">{service.name}</h4>
                     <p className="text-slate-400 text-xs font-bold mt-1 text-left"><Clock size={12} className="inline mr-1"/> {service.duration} mins</p>
                   </div>
                   <span className="font-black text-lg text-blue-600 italic">£{service.price}</span>
@@ -149,6 +204,7 @@ export default function PublicShopPage({ params }) {
           shopId={shop.id} 
           service={selectedService} 
           services={shop.service_menu || []} 
+          businessHours={shop.business_hours} // 🔥 Passing hours down
           onClose={() => setIsBookingOpen(false)} 
         />
       )}

@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
 import Link from 'next/link';
-import { Scissors, ShieldCheck } from 'lucide-react';
+import { Scissors, ShieldCheck, Info } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -10,16 +10,38 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
           
           {/* Brand Column */}
-          <div className="col-span-1 md:col-span-2">
+          <div className="col-span-1 md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="bg-black p-2 rounded-xl text-white">
                 <Scissors size={20} />
               </div>
               <span className="font-black italic uppercase tracking-tighter text-xl text-slate-900">TrimDay</span>
             </div>
-            <p className="text-slate-500 font-bold text-sm max-w-sm leading-relaxed uppercase italic">
+            <p className="text-slate-500 font-bold text-sm max-w-xs leading-relaxed uppercase italic">
               Professional barber management. Built for speed, security, and the perfect fade.
             </p>
+          </div>
+
+          {/* Platform Column (NEW) */}
+          <div>
+            <h4 className="font-black uppercase text-[10px] tracking-widest text-slate-400 mb-6 italic">Platform</h4>
+            <ul className="space-y-4 font-bold text-sm text-slate-600">
+              <li>
+                <Link href="/about" className="hover:text-blue-600 transition-colors uppercase italic flex items-center gap-2">
+                  <Info size={14} /> About TrimDay
+                </Link>
+              </li>
+              <li>
+                <Link href="/join" className="hover:text-blue-600 transition-colors uppercase italic">
+                  List Your Shop
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-blue-600 transition-colors uppercase italic">
+                  Barber Login
+                </Link>
+              </li>
+            </ul>
           </div>
           
           {/* Support Column */}
@@ -40,7 +62,6 @@ export default function Footer() {
             <ul className="space-y-4 font-bold text-sm text-slate-600">
               <li><Link href="/privacy" className="hover:text-blue-600 transition-colors uppercase italic">Privacy Policy</Link></li>
               <li><Link href="/terms" className="hover:text-blue-600 transition-colors uppercase italic">Terms of Service</Link></li>
-              {/* FIXED: Now points to the dedicated cookie page */}
               <li><Link href="/cookie-policy" className="hover:text-blue-600 transition-colors uppercase italic">Cookie Policy</Link></li>
             </ul>
           </div>
