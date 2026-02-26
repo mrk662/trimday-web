@@ -13,14 +13,16 @@ export async function POST(req) {
     }
 
     let emailResponse;
+    const fromAddress = 'TrimDay <bookings@trimday.co.uk>'; // 🔥 Live domain
+    const toAddress = [booking.client_email || 'trimday1@gmail.com']; // 🔥 Dynamic client email with a safe fallback
 
     // 1. EMAIL VERIFICATION
     if (type === 'verify_email') {
       const verifyLink = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/verify?id=${booking.id}`;
       
       emailResponse = await resend.emails.send({
-        from: 'Trimday Testing <onboarding@resend.dev>',
-        to: ['trimday1@gmail.com'], 
+        from: fromAddress,
+        to: toAddress, 
         subject: `Confirm your appointment ✂️ - ${booking.client_name || 'Customer'}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
@@ -35,8 +37,8 @@ export async function POST(req) {
     // 2. FINAL CONFIRMATION (Accept)
     else if (type === 'confirmed' || type === 'confirm') {
       emailResponse = await resend.emails.send({
-        from: 'Trimday Testing <onboarding@resend.dev>',
-        to: ['trimday1@gmail.com'], 
+        from: fromAddress,
+        to: toAddress, 
         subject: `Booking Confirmed! ✂️ - ${booking.booking_date || ''}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
@@ -55,8 +57,8 @@ export async function POST(req) {
     // 3. CANCELLED
     else if (type === 'cancelled' || type === 'cancel') {
       emailResponse = await resend.emails.send({
-        from: 'Trimday Testing <onboarding@resend.dev>',
-        to: ['trimday1@gmail.com'], 
+        from: fromAddress,
+        to: toAddress, 
         subject: `Appointment Cancelled - ${booking.booking_date || ''}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #ef4444; padding: 20px; border-radius: 15px;">
@@ -73,8 +75,8 @@ export async function POST(req) {
       const declineLink = `${process.env.NEXT_PUBLIC_SITE_URL}/booking/response?id=${booking.id}&action=decline`;
 
       emailResponse = await resend.emails.send({
-        from: 'Trimday Testing <onboarding@resend.dev>',
-        to: ['trimday1@gmail.com'], 
+        from: fromAddress,
+        to: toAddress, 
         subject: 'Proposed New Time - ' + (booking.client_name || 'Customer'),
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 15px;">
