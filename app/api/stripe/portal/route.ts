@@ -2,11 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
-// Initialize Stripe with your Trim Day Secret Key (Ensure this is in your .env)
+// 🔥 UPDATED: API Version updated to match your package requirements
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { 
       // @ts-ignore
-      apiVersion: '2023-10-16' // Standard stable version
+      apiVersion: '2026-01-28.clover' as any // Updated to fix the build error
     })
   : null;
 
@@ -15,7 +15,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-export async function POST(req) {
+export async function POST(req: Request) {
   try {
     if (!stripe) {
       console.error("STRIPE_SECRET_KEY is missing");
@@ -43,7 +43,7 @@ export async function POST(req) {
     });
 
     return NextResponse.json({ url: session.url });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Stripe Portal Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
