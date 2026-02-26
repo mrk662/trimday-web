@@ -345,6 +345,18 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                 : <>Check your inbox! You must click the <b>verification link</b> in your email to send this request to the barber.</>
               }
             </p>
+
+            {/* 🔥 NEW: Friendly Junk Folder Warning Box */}
+            {!wasPreVerified && (
+              <div className="border-2 border-amber-400 bg-amber-50 p-4 rounded-2xl shadow-sm mx-4 mb-6">
+                <p className="text-amber-600 font-black text-xs uppercase tracking-widest text-center italic flex items-center justify-center gap-2">
+                  📫 Quick heads up!
+                </p>
+                <p className="text-amber-700 font-bold text-[11px] text-center mt-2 leading-relaxed">
+                  If you don't see the email right away, it might have sneaked into your <b>Junk or Spam</b> folder.<br/>(Marking it as "Not Spam" really helps us out!)
+                </p>
+              </div>
+            )}
             
             <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-10 text-center">
               <p className="text-xs font-bold text-slate-400 italic">

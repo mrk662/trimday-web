@@ -206,43 +206,20 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
+  // 🔥 UPDATED: Reverted to your working PWA setup so Apple doesn't block it
   useEffect(() => {
     const initOneSignal = async () => {
       try {
-        const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
-        if (!appId) {
-          console.error("❌ OneSignal Error: NEXT_PUBLIC_ONESIGNAL_APP_ID is missing from .env");
-          return;
+        if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
+          await OneSignal.init({
+            appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
+            allowLocalhostAsSecureOrigin: true,
+          });
+          // Hide the custom bell if already subscribed
+          if (OneSignal.Notifications) {
+            setPushEnabled(OneSignal.Notifications.hasPermission);
+          }
         }
-
-        await OneSignal.init({
-          appId: appId,
-          allowLocalhostAsSecureOrigin: true, // Required for your local dev testing
-          notifyButton: {
-            enable: true, // 🔥 This makes the "Bell" icon actually appear
-          },
-          welcomeNotification: {
-            title: "TrimDay",
-            message: "You'll now receive booking pings here!",
-          }
-        });
-
-        const setupPushId = async () => {
-          const subId = OneSignal.User.PushSubscription.id;
-          const shopId = localStorage.getItem("barberShopId");
-
-          if (subId && shopId) {
-            console.log("✅ OneSignal Subscribed:", subId);
-            setPushEnabled(true);
-            // Link this device to the shop in Supabase
-            await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shopId);
-          }
-        };
-
-        // Listen for new subscribers clicking "Allow"
-        OneSignal.User.PushSubscription.addEventListener("change", setupPushId);
-        setupPushId();
-
       } catch (err) {
         console.error("OneSignal Init Error:", err);
       }
@@ -516,7 +493,6 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
-  // 🔥 UPDATED: Grabs the hidden high-res layout instead of the small screen QR
   const downloadQR = (id, filename) => {
     const canvas = document.getElementById(id);
     if (canvas) {
@@ -718,7 +694,7 @@ export default function BarberDashboard() {
               </div>
               
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => downloadQR("print-poster", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"><Download size={14} /> Download</button>
+                <button onClick={() => downloadQR("shop-qr-highres", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"><Download size={14} /> Download</button>
                 <button onClick={shareWhatsApp} className="flex items-center justify-center gap-2 bg-green-500 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-green-600 transition-all shadow-lg"><MessageCircle size={14} /> WhatsApp</button>
               </div>
             </section>

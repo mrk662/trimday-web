@@ -4,12 +4,12 @@ import {
   Calendar, Clock, Power, Loader2, Maximize2, X, Plus,
   CheckCircle, XCircle, Scissors, Volume2, VolumeX, Activity, 
   Phone, LogOut, ChevronDown, RefreshCcw, Share, MoreVertical, QrCode,
-  Download // Added Download icon for the button
+  Download 
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import OneSignal from 'react-onesignal';
 import { QRCodeSVG } from "qrcode.react";
-import { QRCode } from 'react-qrcode-logo'; // Added for the high-res printable version
+import { QRCode } from 'react-qrcode-logo'; 
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -90,7 +90,8 @@ export default function StaffGoldenDashboard() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk"); // Added for QR generation
+  const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk"); 
+  const [pushEnabled, setPushEnabled] = useState(false); // Added state for the bell icon
   
   const bookingAudio = useRef(null);
 
@@ -100,7 +101,7 @@ export default function StaffGoldenDashboard() {
     }
   }, []);
 
-  // 🔥 UPDATED ONESIGNAL INIT WITH BELL LOGIC
+  // 🔥 UPDATED: Reverted to manual PWA-friendly push logic
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -112,29 +113,13 @@ export default function StaffGoldenDashboard() {
 
         await OneSignal.init({
           appId: appId,
-          allowLocalhostAsSecureOrigin: true, // Required for your local dev testing
-          notifyButton: {
-            enable: true, // 🔥 This makes the Bell icon appear
-          },
-          welcomeNotification: {
-            title: "TrimDay Staff",
-            message: "Notifications active! You'll get pings for your chair.",
-          }
+          allowLocalhostAsSecureOrigin: true,
         });
 
-        const syncSubscription = async () => {
-          const subId = OneSignal.User.PushSubscription.id;
-          const sId = localStorage.getItem("barberShopId");
-          if (subId && sId) {
-            console.log("✅ Staff Subscribed:", subId);
-            // Save staff device ID to shop record for broadcasting
-            await supabase.from('shops').update({ onesignal_id: subId }).eq('id', sId);
-          }
-        };
-
-        // Sync when they click "Allow"
-        OneSignal.User.PushSubscription.addEventListener("change", syncSubscription);
-        syncSubscription();
+        // Hide bell if already enabled
+        if (OneSignal.Notifications) {
+          setPushEnabled(OneSignal.Notifications.hasPermission);
+        }
 
       } catch (err) {
         console.error("OneSignal Init Error:", err);
@@ -315,7 +300,22 @@ export default function StaffGoldenDashboard() {
     window.location.href = "/login";
   };
 
-  // 🔥 NEW HELPER: Triggers download of the hidden high-res poster
+  // 🔥 NEW: Native Push Permission handler
+  const handleEnablePush = async () => {
+    try {
+      await OneSignal.Notifications.requestPermission();
+      const subId = OneSignal.User.PushSubscription.id;
+      if (subId && shop?.id) {
+        await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shop.id);
+        setPushEnabled(true);
+        alert("Native Notifications Enabled!");
+      }
+    } catch (error) { 
+      console.error("Push failed", error); 
+    }
+  };
+
+  // 🔥 UPDATED HELPER: Points to the highres canvas
   const downloadQR = (id, filename) => {
     const canvas = document.getElementById(id);
     if (canvas) {
@@ -338,6 +338,12 @@ export default function StaffGoldenDashboard() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent" />
         
         <div className="absolute top-6 right-6 z-20 flex gap-3">
+          {/* 🔥 NEW: Custom Bell Icon for Push Alerts */}
+          {!pushEnabled && (
+            <button onClick={handleEnablePush} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl animate-pulse">
+              <Activity size={20} />
+            </button>
+          )}
           <button onClick={() => setShowQrModal(true)} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl"><QrCode size={20} /></button>
           <button onClick={handleLogout} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl"><LogOut size={20} /></button>
         </div>
@@ -474,7 +480,7 @@ export default function StaffGoldenDashboard() {
 
             {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER */}
             <div className="hidden">
-              <div id="print-poster-employee" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+              <div id="shop-qr-highres-emp" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
                 <h2 style={{ fontSize: '48px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '4px', marginBottom: '20px', color: '#0f172a' }}>BOOK ONLINE</h2>
                 <h1 style={{ fontSize: '72px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', marginBottom: '60px', color: '#2563eb' }}>{shop?.name}</h1>
                 <QRCode id="shop-qr-highres-emp" value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
@@ -483,7 +489,7 @@ export default function StaffGoldenDashboard() {
             </div>
 
             <div className="flex gap-3 mb-4">
-              <button onClick={() => downloadQR("print-poster-employee", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
+              <button onClick={() => downloadQR("shop-qr-highres-emp", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
                 <Download size={16}/> Print Poster
               </button>
             </div>
