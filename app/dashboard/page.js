@@ -206,7 +206,6 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
-  // 🔥 UPDATED ONESIGNAL INIT WITH BELL ICON ENABLED
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -517,6 +516,7 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
+  // 🔥 UPDATED: Grabs the hidden high-res layout instead of the small screen QR
   const downloadQR = (id, filename) => {
     const canvas = document.getElementById(id);
     if (canvas) {
@@ -695,15 +695,30 @@ export default function BarberDashboard() {
               </div>
             </section>
 
+            {/* 🔥 UPDATED MARKETING SECTION FOR PRINTABLE POSTER */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
+              
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
+                {/* On-screen visual QR (Small) */}
                 <QRCode id="shop-qr" value={`${baseUrl}/shop/${shop?.slug}`} size={160} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={35} logoHeight={35} bgColor="#f8fafc" fgColor="#0f172a" quietZone={25} />
+                
+                {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER */}
+                <div className="hidden">
+                  <div id="print-poster" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+                    <h2 style={{ fontSize: '48px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '4px', marginBottom: '20px', color: '#0f172a' }}>BOOK ONLINE</h2>
+                    <h1 style={{ fontSize: '72px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', marginBottom: '60px', color: '#2563eb' }}>{shop?.name}</h1>
+                    <QRCode id="shop-qr-highres" value={`${baseUrl}/shop/${shop?.slug}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
+                    <p style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '60px', color: '#64748b' }}>Scan with your phone camera</p>
+                  </div>
+                </div>
+
                 <p className="mt-4 text-[10px] font-black text-slate-900 uppercase italic">Scan to book</p>
               </div>
+              
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => downloadQR("shop-qr", `${shop?.name || 'Shop'}-Booking-QR`)} className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"><Download size={14} /> Download</button>
+                <button onClick={() => downloadQR("print-poster", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex items-center justify-center gap-2 bg-slate-900 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-blue-600 transition-all shadow-lg"><Download size={14} /> Download</button>
                 <button onClick={shareWhatsApp} className="flex items-center justify-center gap-2 bg-green-500 text-white p-4 rounded-2xl font-black text-[9px] uppercase italic hover:bg-green-600 transition-all shadow-lg"><MessageCircle size={14} /> WhatsApp</button>
               </div>
             </section>

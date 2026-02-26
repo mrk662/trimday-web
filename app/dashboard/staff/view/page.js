@@ -3,11 +3,13 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Calendar, Clock, Power, Loader2, Maximize2, X, Plus,
   CheckCircle, XCircle, Scissors, Volume2, VolumeX, Activity, 
-  Phone, LogOut, ChevronDown, RefreshCcw, Share, MoreVertical, QrCode
+  Phone, LogOut, ChevronDown, RefreshCcw, Share, MoreVertical, QrCode,
+  Download // Added Download icon for the button
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import OneSignal from 'react-onesignal';
 import { QRCodeSVG } from "qrcode.react";
+import { QRCode } from 'react-qrcode-logo'; // Added for the high-res printable version
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -88,8 +90,15 @@ export default function StaffGoldenDashboard() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
+  const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk"); // Added for QR generation
   
   const bookingAudio = useRef(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
 
   // 🔥 UPDATED ONESIGNAL INIT WITH BELL LOGIC
   useEffect(() => {
@@ -306,6 +315,20 @@ export default function StaffGoldenDashboard() {
     window.location.href = "/login";
   };
 
+  // 🔥 NEW HELPER: Triggers download of the hidden high-res poster
+  const downloadQR = (id, filename) => {
+    const canvas = document.getElementById(id);
+    if (canvas) {
+      const pngFile = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `${filename}.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    } else {
+      alert("QR code not ready yet.");
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-widest">Syncing Your Chair...</div>;
 
   return (
@@ -436,17 +459,36 @@ export default function StaffGoldenDashboard() {
         </section>
       </div>
 
-      {/* QR MODAL */}
+      {/* QR MODAL (UPDATED WITH DOWNLOAD BUTTON) */}
       {showQrModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-sm rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
             <div className="bg-blue-600/10 p-6 rounded-[2rem] inline-block mb-6 text-blue-600"><QrCode size={48} /></div>
             <h3 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tighter italic">Shop Code</h3>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Clients scan this to book</p>
-            <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-8">
-              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.slug || shop?.id}`} size={220} level="H" includeMargin={false} />
+            
+            {/* Visual Screen SVG (what the employee sees) */}
+            <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-6">
+              <QRCodeSVG value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={220} level="H" includeMargin={false} />
             </div>
-            <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Close</button>
+
+            {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER */}
+            <div className="hidden">
+              <div id="print-poster-employee" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+                <h2 style={{ fontSize: '48px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '4px', marginBottom: '20px', color: '#0f172a' }}>BOOK ONLINE</h2>
+                <h1 style={{ fontSize: '72px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', marginBottom: '60px', color: '#2563eb' }}>{shop?.name}</h1>
+                <QRCode id="shop-qr-highres-emp" value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
+                <p style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '60px', color: '#64748b' }}>Scan with your phone camera</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mb-4">
+              <button onClick={() => downloadQR("print-poster-employee", `${shop?.name || 'Shop'}-Booking-Poster`)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
+                <Download size={16}/> Print Poster
+              </button>
+            </div>
+            
+            <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Close</button>
           </div>
         </div>
       )}

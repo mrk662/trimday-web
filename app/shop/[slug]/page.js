@@ -2,7 +2,7 @@
 import React, { useEffect, useState, use } from "react";
 import { 
   MapPin, Globe, MessageSquare, Calendar, Loader2, 
-  Clock, ChevronRight, Info, ChevronDown // Added ChevronDown for hours list
+  Clock, ChevronRight, Info, ChevronDown, Phone // Made sure Phone is here
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -158,7 +158,7 @@ export default function PublicShopPage({ params }) {
           </div>
 
           <div className="flex justify-center gap-3 mt-6">
-            <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="bg-[#25D366] text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg shadow-green-100"><MessageSquare size={20} /></a>
+            {shop.whatsapp_number && <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="bg-[#25D366] text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg shadow-green-100"><MessageSquare size={20} /></a>}
             {shop.google_business_url && <a href={shop.google_business_url} target="_blank" className="bg-slate-100 text-slate-600 p-3 rounded-full hover:scale-105 transition-transform"><Globe size={20} /></a>}
           </div>
         </div>
@@ -173,9 +173,15 @@ export default function PublicShopPage({ params }) {
             <Calendar /> {isActuallyOpen ? "Book Online" : "Currently Closed"}
           </button>
 
-          <a href={`https://wa.me/${cleanPhone}?text=${whatsappMsg}`} target="_blank" className="flex-1 bg-[#25D366] text-white font-black py-6 rounded-[2rem] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3 text-xl uppercase italic">
-            <MessageSquare /> WhatsApp
-          </a>
+          {/* 🔥 UPDATED: Dynamic Call Shop Button instead of big WhatsApp button */}
+          {shop?.business_phone && (
+            <a 
+              href={`tel:${shop.business_phone}`} 
+              className="flex-1 bg-slate-100 text-slate-900 font-black py-6 rounded-[2rem] shadow-sm hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-3 text-xl uppercase italic"
+            >
+              <Phone /> Call Shop
+            </a>
+          )}
         </div>
 
         {/* 4. SERVICE MENU */}
