@@ -206,7 +206,6 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
-  // 🔥 UPDATED: Reverted to your working PWA setup so Apple doesn't block it
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -215,7 +214,6 @@ export default function BarberDashboard() {
             appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
             allowLocalhostAsSecureOrigin: true,
           });
-          // Hide the custom bell if already subscribed
           if (OneSignal.Notifications) {
             setPushEnabled(OneSignal.Notifications.hasPermission);
           }
@@ -335,20 +333,6 @@ export default function BarberDashboard() {
     setAllTodayBookings(data || []);
     setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
-  };
-
-  const calculateRevenue = () => {
-    let total = 0;
-    const menu = shop?.service_menu || DEFAULT_SERVICES;
-    allTodayBookings.forEach(b => {
-      if (b.status === 'confirmed' || b.status === 'completed') {
-        const service = menu.find(s => s.name === b.service_name);
-        if (service && service.price) {
-          total += Number(service.price);
-        }
-      }
-    });
-    return total;
   };
 
   const updateBookingStatus = async (booking, newStatus) => {
@@ -493,17 +477,62 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
-  const downloadQR = (id, filename) => {
-    const canvas = document.getElementById(id);
-    if (canvas) {
-      const pngFile = canvas.toDataURL("image/png");
-      const downloadLink = document.createElement("a");
-      downloadLink.download = `${filename}.png`;
-      downloadLink.href = pngFile;
-      downloadLink.click();
-    } else {
-      alert("QR code not ready yet.");
-    }
+  // 🔥 UPDATED: High-Res Branded Poster logic
+  const downloadQR = (canvasId, filename) => {
+    const qrCanvas = document.getElementById(canvasId);
+    if (!qrCanvas) return alert("QR not ready yet.");
+
+    // Create a high-res Poster canvas
+    const poster = document.createElement("canvas");
+    const ctx = poster.getContext("2d");
+    poster.width = 1200;
+    poster.height = 1600;
+
+    // 1. Background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, poster.width, poster.height);
+
+    // 2. Header
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#64748b"; 
+    ctx.font = "900 40px sans-serif";
+    ctx.fillText("SCAN TO BOOK ONLINE", poster.width / 2, 160);
+
+    // 3. Shop Name
+    ctx.fillStyle = "#2563eb"; 
+    ctx.font = "italic 900 90px sans-serif";
+    const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
+    ctx.fillText(displayName, poster.width / 2, 280);
+
+    // 4. Draw QR Code
+    const qrSize = 750;
+    const xPos = (poster.width - qrSize) / 2;
+    const yPos = 400;
+    ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
+
+    // 5. Instructions
+    ctx.fillStyle = "#0f172a"; 
+    ctx.font = "bold 45px sans-serif";
+    ctx.fillText("Point your camera at the code", poster.width / 2, 1260);
+    
+    ctx.fillStyle = "#64748b"; 
+    ctx.font = "500 35px sans-serif";
+    ctx.fillText("Tap the link to see our real-time availability", poster.width / 2, 1330);
+
+    // 6. Footer divider and branding
+    ctx.fillStyle = "#cbd5e1"; 
+    ctx.fillRect(400, 1420, 400, 2); 
+
+    ctx.fillStyle = "#2563eb";
+    ctx.font = "900 32px sans-serif";
+    ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
+
+    // 7. Trigger Download
+    const pngFile = poster.toDataURL("image/png");
+    const downloadLink = document.createElement("a");
+    downloadLink.download = `${filename}.png`;
+    downloadLink.href = pngFile;
+    downloadLink.click();
   };
 
   const shareWhatsApp = () => {
@@ -671,23 +700,17 @@ export default function BarberDashboard() {
               </div>
             </section>
 
-            {/* 🔥 UPDATED MARKETING SECTION FOR PRINTABLE POSTER */}
+            {/* MARKETING SECTION FOR PRINTABLE POSTER */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
               
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
-                {/* On-screen visual QR (Small) */}
                 <QRCode id="shop-qr" value={`${baseUrl}/shop/${shop?.slug}`} size={160} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={35} logoHeight={35} bgColor="#f8fafc" fgColor="#0f172a" quietZone={25} />
                 
-                {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER */}
+                {/* HIDDEN HIGH-RES PRINTABLE POSTER */}
                 <div className="hidden">
-                  <div id="print-poster" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
-                    <h2 style={{ fontSize: '48px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '4px', marginBottom: '20px', color: '#0f172a' }}>BOOK ONLINE</h2>
-                    <h1 style={{ fontSize: '72px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', marginBottom: '60px', color: '#2563eb' }}>{shop?.name}</h1>
-                    <QRCode id="shop-qr-highres" value={`${baseUrl}/shop/${shop?.slug}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
-                    <p style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '60px', color: '#64748b' }}>Scan with your phone camera</p>
-                  </div>
+                  <QRCode id="shop-qr-highres" value={`${baseUrl}/shop/${shop?.slug}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
                 </div>
 
                 <p className="mt-4 text-[10px] font-black text-slate-900 uppercase italic">Scan to book</p>
@@ -845,33 +868,32 @@ export default function BarberDashboard() {
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95">
             <h3 className="text-2xl font-black text-slate-900 text-center mb-6 uppercase tracking-tighter italic">New Walk-In</h3>
-            <div className="grid gap-2">
+            <div className="grid gap-2 text-left">
               {menuItems.map((service, idx) => (
-                <button key={idx} onClick={() => confirmWalkIn(service)} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group">
-                  <div className="text-left"><p className="font-black text-lg text-slate-900">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase">{service.duration} mins</p></div>
-                  <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black">£{service.price}</span>
+                <button key={idx} onClick={() => confirmWalkIn(service)} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
+                  <div className="text-left text-left"><p className="font-black text-lg text-left">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase text-left">{service.duration} mins</p></div>
+                  <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black text-left">£{service.price}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowServiceMenu(false)} className="w-full mt-6 py-4 text-slate-400 font-black text-xs uppercase tracking-widest text-center">Cancel</button>
+            <button onClick={() => setShowServiceMenu(false)} className="w-full mt-6 py-4 text-slate-400 font-black text-xs uppercase tracking-widest text-center text-left">Cancel</button>
           </div>
         </div>
       )}
 
-      {/* 🔥 RESCHEDULE MODAL */}
+      {/* RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900 uppercase italic">Change Time</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 italic">Suggest a new slot to {reschedulingBooking.client_name}</p>
-            <div className="relative mb-6">
-              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-slate-900" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-left">Change Time</h3>
+            <div className="relative mb-6 text-left">
+              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-left" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
                 <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
+              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-left" size={24} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center italic">Cancel</button>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center text-left">Cancel</button>
               <button onClick={async () => {
                 if (!newTimeInput) return;
                 await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
@@ -883,10 +905,8 @@ export default function BarberDashboard() {
                     type: 'rescheduled' 
                   }),
                 });
-                setReschedulingBooking(null); 
-                setNewTimeInput(""); 
-                fetchBookings(shop.id);
-              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center disabled:opacity-50 italic">Send Request</button>
+                setReschedulingBooking(null); setNewTimeInput(""); fetchBookings(shop.id);
+              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center">Send</button>
             </div>
           </div>
         </div>

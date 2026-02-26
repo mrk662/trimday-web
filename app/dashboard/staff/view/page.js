@@ -91,7 +91,7 @@ export default function StaffGoldenDashboard() {
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk"); 
-  const [pushEnabled, setPushEnabled] = useState(false); // Added state for the bell icon
+  const [pushEnabled, setPushEnabled] = useState(false); 
   
   const bookingAudio = useRef(null);
 
@@ -101,7 +101,6 @@ export default function StaffGoldenDashboard() {
     }
   }, []);
 
-  // 🔥 UPDATED: Reverted to manual PWA-friendly push logic
   useEffect(() => {
     const initOneSignal = async () => {
       try {
@@ -116,7 +115,6 @@ export default function StaffGoldenDashboard() {
           allowLocalhostAsSecureOrigin: true,
         });
 
-        // Hide bell if already enabled
         if (OneSignal.Notifications) {
           setPushEnabled(OneSignal.Notifications.hasPermission);
         }
@@ -300,7 +298,6 @@ export default function StaffGoldenDashboard() {
     window.location.href = "/login";
   };
 
-  // 🔥 NEW: Native Push Permission handler
   const handleEnablePush = async () => {
     try {
       await OneSignal.Notifications.requestPermission();
@@ -315,18 +312,62 @@ export default function StaffGoldenDashboard() {
     }
   };
 
-  // 🔥 UPDATED HELPER: Points to the highres canvas
-  const downloadQR = (id, filename) => {
-    const canvas = document.getElementById(id);
-    if (canvas) {
-      const pngFile = canvas.toDataURL("image/png");
-      const downloadLink = document.createElement("a");
-      downloadLink.download = `${filename}.png`;
-      downloadLink.href = pngFile;
-      downloadLink.click();
-    } else {
-      alert("QR code not ready yet.");
-    }
+  // 🔥 UPDATED: High-Res Branded Poster logic
+  const downloadQR = (canvasId, filename) => {
+    const qrCanvas = document.getElementById(canvasId);
+    if (!qrCanvas) return alert("QR not ready yet.");
+
+    // Create a high-res Poster canvas
+    const poster = document.createElement("canvas");
+    const ctx = poster.getContext("2d");
+    poster.width = 1200;
+    poster.height = 1600;
+
+    // 1. Background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, poster.width, poster.height);
+
+    // 2. Header
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#64748b"; 
+    ctx.font = "900 40px sans-serif";
+    ctx.fillText("SCAN TO BOOK ONLINE", poster.width / 2, 160);
+
+    // 3. Shop Name
+    ctx.fillStyle = "#2563eb"; 
+    ctx.font = "italic 900 90px sans-serif";
+    const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
+    ctx.fillText(displayName, poster.width / 2, 280);
+
+    // 4. Draw QR Code
+    const qrSize = 750;
+    const xPos = (poster.width - qrSize) / 2;
+    const yPos = 400;
+    ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
+
+    // 5. Instructions
+    ctx.fillStyle = "#0f172a"; 
+    ctx.font = "bold 45px sans-serif";
+    ctx.fillText("Point your camera at the code", poster.width / 2, 1260);
+    
+    ctx.fillStyle = "#64748b"; 
+    ctx.font = "500 35px sans-serif";
+    ctx.fillText("Tap the link to see our real-time availability", poster.width / 2, 1330);
+
+    // 6. Footer
+    ctx.fillStyle = "#cbd5e1"; 
+    ctx.fillRect(400, 1420, 400, 2); 
+
+    ctx.fillStyle = "#2563eb";
+    ctx.font = "900 32px sans-serif";
+    ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
+
+    // 7. Trigger Download
+    const pngFile = poster.toDataURL("image/png");
+    const downloadLink = document.createElement("a");
+    downloadLink.download = `${filename}.png`;
+    downloadLink.href = pngFile;
+    downloadLink.click();
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-widest">Syncing Your Chair...</div>;
@@ -338,7 +379,6 @@ export default function StaffGoldenDashboard() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent" />
         
         <div className="absolute top-6 right-6 z-20 flex gap-3">
-          {/* 🔥 NEW: Custom Bell Icon for Push Alerts */}
           {!pushEnabled && (
             <button onClick={handleEnablePush} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl animate-pulse">
               <Activity size={20} />
@@ -465,7 +505,7 @@ export default function StaffGoldenDashboard() {
         </section>
       </div>
 
-      {/* QR MODAL (UPDATED WITH DOWNLOAD BUTTON) */}
+      {/* QR MODAL */}
       {showQrModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-sm rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
@@ -473,19 +513,13 @@ export default function StaffGoldenDashboard() {
             <h3 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tighter italic">Shop Code</h3>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Clients scan this to book</p>
             
-            {/* Visual Screen SVG (what the employee sees) */}
             <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-6">
               <QRCodeSVG value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={220} level="H" includeMargin={false} />
             </div>
 
-            {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER */}
+            {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER (Used for drawing) */}
             <div className="hidden">
-              <div id="shop-qr-highres-emp" style={{ width: '1024px', height: '1024px', backgroundColor: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
-                <h2 style={{ fontSize: '48px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '4px', marginBottom: '20px', color: '#0f172a' }}>BOOK ONLINE</h2>
-                <h1 style={{ fontSize: '72px', fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase', marginBottom: '60px', color: '#2563eb' }}>{shop?.name}</h1>
-                <QRCode id="shop-qr-highres-emp" value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
-                <p style={{ fontSize: '32px', fontWeight: 'bold', marginTop: '60px', color: '#64748b' }}>Scan with your phone camera</p>
-              </div>
+              <QRCode id="shop-qr-highres-emp" value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
             </div>
 
             <div className="flex gap-3 mb-4">
@@ -506,8 +540,8 @@ export default function StaffGoldenDashboard() {
             <h3 className="text-3xl font-black text-slate-900 text-center mb-10 uppercase tracking-tighter italic">Quick Walk-In</h3>
             <div className="grid gap-3">
               {(shop?.service_menu || []).map((s, idx) => (
-                <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group">
-                  <div className="text-left"><p className="font-black text-xl uppercase italic">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
+                <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
+                  <div><p className="font-black text-xl uppercase italic">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
                   <span className="text-blue-600 group-hover:text-blue-700 text-2xl italic font-black">£{s.price}</span>
                 </button>
               ))}

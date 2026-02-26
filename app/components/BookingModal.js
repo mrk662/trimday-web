@@ -31,7 +31,7 @@ const setLocalTimeFromMinutes = (dayDate, mins) =>
   new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), Math.floor(mins / 60), mins % 60, 0, 0);
 const formatTime = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
-// 🔥 UPDATED: Now accepts full business_hours object
+// 🔥 Complex logic respecting business hours
 const buildSlotsNext24hRespectingHours = ({ now, businessHours, intervalMinutes = 30, bufferMinutes = 30 }) => {
   const horizonEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const slots = [];
@@ -44,7 +44,6 @@ const buildSlotsNext24hRespectingHours = ({ now, businessHours, intervalMinutes 
     const hours = businessHours?.[dayKey] || { open: "09:00", close: "19:00", is_closed: false };
 
     if (hours.is_closed) {
-      // Skip to start of next day
       cursor = startOfLocalDay(addMinutes(cursor, 24 * 60));
       continue;
     }
@@ -97,7 +96,6 @@ export default function BookingModal({ shopId, service, services, onClose }) {
 
     const fetchInitialData = async () => {
       setLoadingBarbers(true);
-      // 🔥 Fetching business_hours column
       const { data: shop } = await supabase.from("shops").select("open_time, close_time, business_hours, name").eq("id", shopId).single();
       setShopTimeData(shop);
       await refreshBarbers();
@@ -131,7 +129,6 @@ export default function BookingModal({ shopId, service, services, onClose }) {
 
   const [tick] = useState(Date.now());
 
-  // 🔥 UPDATED MEMO: Now respects complex business hours
   const slots = useMemo(() => {
     return buildSlotsNext24hRespectingHours({
       now: new Date(tick),
@@ -346,19 +343,8 @@ export default function BookingModal({ shopId, service, services, onClose }) {
               }
             </p>
 
-            {/* 🔥 NEW: Friendly Junk Folder Warning Box */}
-            {!wasPreVerified && (
-              <div className="border-2 border-amber-400 bg-amber-50 p-4 rounded-2xl shadow-sm mx-4 mb-6">
-                <p className="text-amber-600 font-black text-xs uppercase tracking-widest text-center italic flex items-center justify-center gap-2">
-                  📫 Quick heads up!
-                </p>
-                <p className="text-amber-700 font-bold text-[11px] text-center mt-2 leading-relaxed">
-                  If you don't see the email right away, it might have sneaked into your <b>Junk or Spam</b> folder.<br/>(Marking it as "Not Spam" really helps us out!)
-                </p>
-              </div>
-            )}
-            
-            <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-10 text-center">
+            {/* 1. Explainer Box (Now First) */}
+            <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-4 text-center">
               <p className="text-xs font-bold text-slate-400 italic">
                 {wasPreVerified 
                   ? "Sit back and relax. We'll email you once the barber confirms your spot."
@@ -366,6 +352,18 @@ export default function BookingModal({ shopId, service, services, onClose }) {
                 }
               </p>
             </div>
+
+            {/* 2. Friendly Junk Folder Warning Box (Now Second) */}
+            {!wasPreVerified && (
+              <div className="border-2 border-amber-400 bg-amber-50 p-4 rounded-2xl shadow-sm mx-4 mb-10">
+                <p className="text-amber-600 font-black text-xs uppercase tracking-widest text-center italic flex items-center justify-center gap-2">
+                  📫 Quick heads up!
+                </p>
+                <p className="text-amber-700 font-bold text-[11px] text-center mt-2 leading-relaxed">
+                  Sometimes emails can be slow. If you don't see it straight away, please <b>check your Junk or Spam</b> folder.
+                </p>
+              </div>
+            )}
 
             <button onClick={onClose} className="w-full bg-slate-100 text-slate-900 p-6 rounded-[2.5rem] font-black text-xl shadow-inner hover:bg-slate-200 transition-all text-center uppercase italic">Sweet, thanks!</button>
           </div>
