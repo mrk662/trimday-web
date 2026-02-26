@@ -30,7 +30,6 @@ const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
   return `${hour.toString().padStart(2, '0')}:${min}`;
 });
 
-// 🔥 Default Hours helper
 const DEFAULT_HOURS = {
   mon: { open: "09:00", close: "18:00", is_closed: false },
   tue: { open: "09:00", close: "18:00", is_closed: false },
@@ -41,7 +40,6 @@ const DEFAULT_HOURS = {
   sun: { open: "09:00", close: "17:00", is_closed: true },
 };
 
-// --- NEW INITIALS AVATAR COMPONENT ---
 const Avatar = ({ name, offline = false }) => {
   const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   return (
@@ -208,28 +206,44 @@ export default function BarberDashboard() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
+  // 🔥 UPDATED ONESIGNAL INIT WITH BELL ICON ENABLED
   useEffect(() => {
     const initOneSignal = async () => {
       try {
-        const shopId = localStorage.getItem("barberShopId");
-        if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
-          await OneSignal.init({
-            appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-            allowLocalhostAsSecureOrigin: true,
-          });
-
-          const permission = OneSignal.Notifications.permission;
-          const subId = OneSignal.User.PushSubscription.id;
-          
-          if (permission && subId) {
-            setPushEnabled(true);
-            if (shopId) {
-              await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shopId);
-            }
-          } else {
-            setPushEnabled(false);
-          }
+        const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
+        if (!appId) {
+          console.error("❌ OneSignal Error: NEXT_PUBLIC_ONESIGNAL_APP_ID is missing from .env");
+          return;
         }
+
+        await OneSignal.init({
+          appId: appId,
+          allowLocalhostAsSecureOrigin: true, // Required for your local dev testing
+          notifyButton: {
+            enable: true, // 🔥 This makes the "Bell" icon actually appear
+          },
+          welcomeNotification: {
+            title: "TrimDay",
+            message: "You'll now receive booking pings here!",
+          }
+        });
+
+        const setupPushId = async () => {
+          const subId = OneSignal.User.PushSubscription.id;
+          const shopId = localStorage.getItem("barberShopId");
+
+          if (subId && shopId) {
+            console.log("✅ OneSignal Subscribed:", subId);
+            setPushEnabled(true);
+            // Link this device to the shop in Supabase
+            await supabase.from('shops').update({ onesignal_id: subId }).eq('id', shopId);
+          }
+        };
+
+        // Listen for new subscribers clicking "Allow"
+        OneSignal.User.PushSubscription.addEventListener("change", setupPushId);
+        setupPushId();
+
       } catch (err) {
         console.error("OneSignal Init Error:", err);
       }
@@ -827,23 +841,9 @@ export default function BarberDashboard() {
             <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed mb-8 text-center">
               This will remove <span className="text-slate-900">"{menuItems[deleteTarget]?.name}"</span> from your menu permanently.
             </p>
-            
             <div className="flex flex-col gap-3">
-              <button 
-                onClick={() => {
-                  setMenuItems(menuItems.filter((_, i) => i !== deleteTarget));
-                  setDeleteTarget(null);
-                }} 
-                className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase italic shadow-lg shadow-red-200 active:scale-95 transition-all"
-              >
-                Yes, Delete It
-              </button>
-              <button 
-                onClick={() => setDeleteTarget(null)} 
-                className="w-full bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
-              >
-                Cancel
-              </button>
+              <button onClick={() => { setMenuItems(menuItems.filter((_, i) => i !== deleteTarget)); setDeleteTarget(null); }} className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase italic shadow-lg shadow-red-200 active:scale-95 transition-all">Yes, Delete It</button>
+              <button onClick={() => setDeleteTarget(null)} className="w-full bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all">Cancel</button>
             </div>
           </div>
         </div>
@@ -883,10 +883,7 @@ export default function BarberDashboard() {
               <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center italic">Cancel</button>
               <button onClick={async () => {
                 if (!newTimeInput) return;
-                
                 await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
-                
-                // Trigger notification with the new link
                 await fetch('/api/notify', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -895,7 +892,6 @@ export default function BarberDashboard() {
                     type: 'rescheduled' 
                   }),
                 });
-                
                 setReschedulingBooking(null); 
                 setNewTimeInput(""); 
                 fetchBookings(shop.id);

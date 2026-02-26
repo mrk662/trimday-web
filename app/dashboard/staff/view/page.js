@@ -91,15 +91,42 @@ export default function StaffGoldenDashboard() {
   
   const bookingAudio = useRef(null);
 
+  // 🔥 UPDATED ONESIGNAL INIT WITH BELL LOGIC
   useEffect(() => {
     const initOneSignal = async () => {
       try {
-        if (process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID) {
-          await OneSignal.init({
-            appId: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID,
-            allowLocalhostAsSecureOrigin: true,
-          });
+        const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
+        if (!appId) {
+          console.error("❌ OneSignal Error: NEXT_PUBLIC_ONESIGNAL_APP_ID is missing");
+          return;
         }
+
+        await OneSignal.init({
+          appId: appId,
+          allowLocalhostAsSecureOrigin: true, // Required for your local dev testing
+          notifyButton: {
+            enable: true, // 🔥 This makes the Bell icon appear
+          },
+          welcomeNotification: {
+            title: "TrimDay Staff",
+            message: "Notifications active! You'll get pings for your chair.",
+          }
+        });
+
+        const syncSubscription = async () => {
+          const subId = OneSignal.User.PushSubscription.id;
+          const sId = localStorage.getItem("barberShopId");
+          if (subId && sId) {
+            console.log("✅ Staff Subscribed:", subId);
+            // Save staff device ID to shop record for broadcasting
+            await supabase.from('shops').update({ onesignal_id: subId }).eq('id', sId);
+          }
+        };
+
+        // Sync when they click "Allow"
+        OneSignal.User.PushSubscription.addEventListener("change", syncSubscription);
+        syncSubscription();
+
       } catch (err) {
         console.error("OneSignal Init Error:", err);
       }
@@ -121,7 +148,6 @@ export default function StaffGoldenDashboard() {
         if (soundEnabled && payload.eventType === 'INSERT') bookingAudio.current.play().catch(() => {});
         fetchBookings(bId, sId);
       })
-      // 🔥 ADDED: Real-time update listener so dashboard flips from "Rescheduled" to "Confirmed" instantly
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
         fetchBookings(bId, sId);
       })
@@ -210,9 +236,9 @@ export default function StaffGoldenDashboard() {
 
   const updateStatus = async (id, status) => {
     const booking = myBookings.find(b => b.id === id);
-    await supabase.from("bookings").update({ status }).eq("id", id);
+    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
     
-    if (status === 'confirmed' && booking && !booking.client_name.includes("Walk-in")) {
+    if (!error && status === 'confirmed' && booking && !booking.client_name.includes("Walk-in")) {
       await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,13 +256,8 @@ export default function StaffGoldenDashboard() {
   const handleReschedule = async () => {
     if (!newTimeInput || !reschedulingBooking) return;
     
-    // Set status to rescheduled and save proposed time
-    await supabase.from("bookings").update({ 
-      status: 'rescheduled', 
-      proposed_time: newTimeInput 
-    }).eq("id", reschedulingBooking.id);
+    await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
     
-    // 🔥 Trigger API notification for customer to Accept/Decline
     await fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -285,7 +306,7 @@ export default function StaffGoldenDashboard() {
     window.location.href = "/login";
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase">Syncing Your Chair...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-widest">Syncing Your Chair...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 text-left font-sans">
@@ -353,12 +374,7 @@ export default function StaffGoldenDashboard() {
                     {b.status === 'unverified' ? '⏳ Email Pending' : `${b.service_name} • ${b.booking_time}`}
                   </p>
                 </div>
-                <button 
-                  onClick={() => claimBooking(b.id)} 
-                  className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic"
-                >
-                  Claim
-                </button>
+                <button onClick={() => claimBooking(b.id)} className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic">Claim</button>
               </div>
             ))}
           </div>
@@ -399,35 +415,19 @@ export default function StaffGoldenDashboard() {
                       </div>
                       <div className="flex gap-2">
                         {b.status === 'confirmed' ? (
-                          <button 
-                            onClick={() => updateStatus(b.id, 'completed')} 
-                            className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all"
-                          >
-                            <CheckCircle size={24} />
-                          </button>
+                          <button onClick={() => updateStatus(b.id, 'completed')} className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all"><CheckCircle size={24} /></button>
                         ) : b.status === 'rescheduled' ? (
                           <div className="bg-blue-100 text-blue-600 p-4 rounded-2xl"><RefreshCcw size={20} className="animate-spin" /></div>
                         ) : (
-                          <button 
-                            onClick={() => updateStatus(b.id, 'confirmed')} 
-                            className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic"
-                          >
-                            Accept
-                          </button>
+                          <button onClick={() => updateStatus(b.id, 'confirmed')} className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic">Accept</button>
                         )}
                       </div>
                    </div>
 
                    <div className="flex gap-2 pt-2 border-t border-slate-50">
-                      <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white italic">
-                        <XCircle size={14}/> Cancel
-                      </button>
-                      <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic">
-                        <RefreshCcw size={14}/> Change
-                      </button>
-                      <a href={`tel:${b.client_phone}`} className="p-3 bg-slate-900 text-white rounded-xl active:scale-90 transition-transform">
-                        <Phone size={14}/>
-                      </a>
+                      <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white italic"><XCircle size={14}/> Cancel</button>
+                      <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic"><RefreshCcw size={14}/> Change</button>
+                      <a href={`tel:${b.client_phone}`} className="p-3 bg-slate-900 text-white rounded-xl active:scale-90 transition-transform"><Phone size={14}/></a>
                    </div>
                 </div>
               ))
@@ -440,21 +440,12 @@ export default function StaffGoldenDashboard() {
       {showQrModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-sm rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
-            <div className="bg-blue-600/10 p-6 rounded-[2rem] inline-block mb-6 text-blue-600">
-              <QrCode size={48} />
-            </div>
+            <div className="bg-blue-600/10 p-6 rounded-[2rem] inline-block mb-6 text-blue-600"><QrCode size={48} /></div>
             <h3 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tighter italic">Shop Code</h3>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Clients scan this to book</p>
-            
             <div className="bg-white p-4 rounded-3xl border-4 border-slate-50 shadow-inner flex justify-center mb-8">
-              <QRCodeSVG 
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.slug || shop?.id}`}
-                size={220}
-                level="H"
-                includeMargin={false}
-              />
+              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/shop/${shop?.slug || shop?.id}`} size={220} level="H" includeMargin={false} />
             </div>
-            
             <button onClick={() => setShowQrModal(false)} className="w-full py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Close</button>
           </div>
         </div>
@@ -482,28 +473,17 @@ export default function StaffGoldenDashboard() {
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-2 tracking-tight text-center uppercase italic">Change Time</h3>
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-center uppercase italic">Propose New Time</h3>
             <p className="text-[10px] font-bold text-slate-400 text-center uppercase mb-6 tracking-widest italic">Suggesting to {reschedulingBooking.client_name}</p>
             <div className="relative mb-6">
-              <select 
-                className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center uppercase italic" 
-                value={newTimeInput} 
-                onChange={(e) => setNewTimeInput(e.target.value)}
-              >
-                <option value="">Select Time</option>
-                {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center uppercase italic" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
+                <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-center">
               <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest text-center italic">Cancel</button>
-              <button 
-                onClick={handleReschedule} 
-                disabled={!newTimeInput} 
-                className="py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl tracking-widest text-center active:scale-95 transition-all italic disabled:opacity-50"
-              >
-                Send Request
-              </button>
+              <button onClick={handleReschedule} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl tracking-widest text-center active:scale-95 transition-all italic disabled:opacity-50">Send Request</button>
             </div>
           </div>
         </div>
