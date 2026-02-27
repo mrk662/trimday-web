@@ -85,7 +85,7 @@ export default function StaffGoldenDashboard() {
   const [myBookings, setMyBookings] = useState([]);
   const [broadcast, setBroadcast] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false); // 🔥 Default OFF
   const [showWalkInMenu, setShowWalkInMenu] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
@@ -312,57 +312,82 @@ export default function StaffGoldenDashboard() {
     }
   };
 
-  // 🔥 UPDATED: High-Res Branded Poster logic
+  // 🔥 AUDIO FIX: Wakes up browser audio API
+  const toggleSound = () => {
+    const audioEl = bookingAudio.current;
+    if (!soundEnabled) {
+      if (audioEl) {
+        audioEl.muted = true;
+        audioEl.play().then(() => {
+          audioEl.muted = false;
+          setSoundEnabled(true);
+        }).catch(e => console.error("Audio unlock failed", e));
+      } else {
+        setSoundEnabled(true);
+      }
+    } else {
+      setSoundEnabled(false);
+    }
+  };
+
+  // 🔥 V2 PREMIUM DARK MODE POSTER
   const downloadQR = (canvasId, filename) => {
     const qrCanvas = document.getElementById(canvasId);
     if (!qrCanvas) return alert("QR not ready yet.");
 
-    // Create a high-res Poster canvas
     const poster = document.createElement("canvas");
     const ctx = poster.getContext("2d");
     poster.width = 1200;
     poster.height = 1600;
 
-    // 1. Background
-    ctx.fillStyle = "#ffffff";
+    // 1. Dark Premium Background (Slate-900)
+    ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, poster.width, poster.height);
 
-    // 2. Header
+    // 2. Punchy Header (White)
     ctx.textAlign = "center";
-    ctx.fillStyle = "#64748b"; 
-    ctx.font = "900 40px sans-serif";
-    ctx.fillText("SCAN TO BOOK ONLINE", poster.width / 2, 160);
+    ctx.fillStyle = "#ffffff"; 
+    ctx.font = "900 45px sans-serif";
+    ctx.fillText("BOOK YOUR TRIM IN SECONDS", poster.width / 2, 160);
 
-    // 3. Shop Name
-    ctx.fillStyle = "#2563eb"; 
-    ctx.font = "italic 900 90px sans-serif";
+    // 3. Shop Name (TrimDay Blue)
+    ctx.fillStyle = "#3b82f6"; // Brighter blue for dark background
+    ctx.font = "italic 900 100px sans-serif";
     const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
     ctx.fillText(displayName, poster.width / 2, 280);
 
-    // 4. Draw QR Code
+    // 4. White Background Box for the QR Code (so it scans perfectly)
     const qrSize = 750;
+    const padding = 40;
+    const boxSize = qrSize + (padding * 2);
+    const xBox = (poster.width - boxSize) / 2;
+    const yBox = 380;
+    
+    // Draw rounded white box
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); // 40px border radius
+    ctx.fill();
+
+    // 5. Draw QR Code inside the box
     const xPos = (poster.width - qrSize) / 2;
-    const yPos = 400;
+    const yPos = 380 + padding;
     ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
 
-    // 5. Instructions
-    ctx.fillStyle = "#0f172a"; 
-    ctx.font = "bold 45px sans-serif";
-    ctx.fillText("Point your camera at the code", poster.width / 2, 1260);
+    // 6. Minimalist Footer Instructions
+    ctx.fillStyle = "#cbd5e1"; // Slate-300
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillText("Point your camera at the code", poster.width / 2, 1330);
     
-    ctx.fillStyle = "#64748b"; 
-    ctx.font = "500 35px sans-serif";
-    ctx.fillText("Tap the link to see our real-time availability", poster.width / 2, 1330);
+    // 7. Divider and Branding
+    ctx.fillStyle = "#334155"; // Slate-700
+    ctx.fillRect(400, 1420, 400, 3); 
 
-    // 6. Footer
-    ctx.fillStyle = "#cbd5e1"; 
-    ctx.fillRect(400, 1420, 400, 2); 
-
-    ctx.fillStyle = "#2563eb";
-    ctx.font = "900 32px sans-serif";
+    ctx.fillStyle = "#3b82f6"; // Blue
+    ctx.font = "900 35px sans-serif";
     ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
 
-    // 7. Trigger Download
+    // 8. Trigger Download
     const pngFile = poster.toDataURL("image/png");
     const downloadLink = document.createElement("a");
     downloadLink.download = `${filename}.png`;
@@ -420,7 +445,7 @@ export default function StaffGoldenDashboard() {
               <Power size={14} />
               {barber?.is_available_today ? "Online" : "Offline"}
             </button>
-            <button onClick={() => setSoundEnabled(!soundEnabled)} className={`p-4 rounded-2xl transition-all ${soundEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
+            <button onClick={toggleSound} className={`p-4 rounded-2xl transition-all ${soundEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
               {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
             </button>
           </div>

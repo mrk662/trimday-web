@@ -6,7 +6,7 @@ import {
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
   CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock,
-  AlertTriangle 
+  AlertTriangle, TrendingUp, Eye, EyeOff 
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -171,7 +171,7 @@ export default function BarberDashboard() {
   const [allTodayBookings, setAllTodayBookings] = useState([]);
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(false); 
   const [showServiceMenu, setShowServiceMenu] = useState(false); 
   const [isEditingMenu, setIsEditingMenu] = useState(false);     
   const [menuItems, setMenuItems] = useState([]);
@@ -193,6 +193,9 @@ export default function BarberDashboard() {
   });
 
   const [businessHours, setBusinessHours] = useState(DEFAULT_HOURS);
+  
+  const [showRevenue, setShowRevenue] = useState(false);
+  const [showSetupNudge, setShowSetupNudge] = useState(true);
 
   const soundEnabledRef = useRef(soundEnabled);
 
@@ -333,6 +336,37 @@ export default function BarberDashboard() {
     setAllTodayBookings(data || []);
     setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
+  };
+
+  const toggleSound = () => {
+    const audioEl = document.getElementById("bookingAlert");
+    if (!soundEnabled) {
+      if (audioEl) {
+        audioEl.muted = true;
+        audioEl.play().then(() => {
+          audioEl.muted = false;
+          setSoundEnabled(true);
+        }).catch(e => console.error("Audio unlock failed", e));
+      } else {
+        setSoundEnabled(true);
+      }
+    } else {
+      setSoundEnabled(false);
+    }
+  };
+
+  const calculateRevenue = () => {
+    let total = 0;
+    const menu = shop?.service_menu || DEFAULT_SERVICES;
+    allTodayBookings.forEach(b => {
+      if (b.status === 'confirmed' || b.status === 'completed') {
+        const service = menu.find(s => s.name === b.service_name);
+        if (service && service.price) {
+          total += Number(service.price);
+        }
+      }
+    });
+    return total;
   };
 
   const updateBookingStatus = async (booking, newStatus) => {
@@ -477,57 +511,64 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
-  // 🔥 UPDATED: High-Res Branded Poster logic
+  // 🔥 V2 PREMIUM DARK MODE POSTER
   const downloadQR = (canvasId, filename) => {
     const qrCanvas = document.getElementById(canvasId);
     if (!qrCanvas) return alert("QR not ready yet.");
 
-    // Create a high-res Poster canvas
     const poster = document.createElement("canvas");
     const ctx = poster.getContext("2d");
     poster.width = 1200;
     poster.height = 1600;
 
-    // 1. Background
-    ctx.fillStyle = "#ffffff";
+    // 1. Dark Premium Background (Slate-900)
+    ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, poster.width, poster.height);
 
-    // 2. Header
+    // 2. Punchy Header (White)
     ctx.textAlign = "center";
-    ctx.fillStyle = "#64748b"; 
-    ctx.font = "900 40px sans-serif";
-    ctx.fillText("SCAN TO BOOK ONLINE", poster.width / 2, 160);
+    ctx.fillStyle = "#ffffff"; 
+    ctx.font = "900 45px sans-serif";
+    ctx.fillText("BOOK YOUR TRIM IN SECONDS", poster.width / 2, 160);
 
-    // 3. Shop Name
-    ctx.fillStyle = "#2563eb"; 
-    ctx.font = "italic 900 90px sans-serif";
+    // 3. Shop Name (TrimDay Blue)
+    ctx.fillStyle = "#3b82f6"; // Brighter blue for dark background
+    ctx.font = "italic 900 100px sans-serif";
     const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
     ctx.fillText(displayName, poster.width / 2, 280);
 
-    // 4. Draw QR Code
+    // 4. White Background Box for the QR Code (so it scans perfectly)
     const qrSize = 750;
+    const padding = 40;
+    const boxSize = qrSize + (padding * 2);
+    const xBox = (poster.width - boxSize) / 2;
+    const yBox = 380;
+    
+    // Draw rounded white box
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); // 40px border radius
+    ctx.fill();
+
+    // 5. Draw QR Code inside the box
     const xPos = (poster.width - qrSize) / 2;
-    const yPos = 400;
+    const yPos = 380 + padding;
     ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
 
-    // 5. Instructions
-    ctx.fillStyle = "#0f172a"; 
-    ctx.font = "bold 45px sans-serif";
-    ctx.fillText("Point your camera at the code", poster.width / 2, 1260);
+    // 6. Minimalist Footer Instructions
+    ctx.fillStyle = "#cbd5e1"; // Slate-300
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillText("Point your camera at the code", poster.width / 2, 1330);
     
-    ctx.fillStyle = "#64748b"; 
-    ctx.font = "500 35px sans-serif";
-    ctx.fillText("Tap the link to see our real-time availability", poster.width / 2, 1330);
+    // 7. Divider and Branding
+    ctx.fillStyle = "#334155"; // Slate-700
+    ctx.fillRect(400, 1420, 400, 3); 
 
-    // 6. Footer divider and branding
-    ctx.fillStyle = "#cbd5e1"; 
-    ctx.fillRect(400, 1420, 400, 2); 
-
-    ctx.fillStyle = "#2563eb";
-    ctx.font = "900 32px sans-serif";
+    ctx.fillStyle = "#3b82f6"; // Blue
+    ctx.font = "900 35px sans-serif";
     ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
 
-    // 7. Trigger Download
+    // 8. Trigger Download
     const pngFile = poster.toDataURL("image/png");
     const downloadLink = document.createElement("a");
     downloadLink.download = `${filename}.png`;
@@ -558,64 +599,92 @@ export default function BarberDashboard() {
         <PwaPrompt />
 
         <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
-          <div className="flex items-center gap-6">
-            <div>
+          
+          <div className="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto">
+            <div className="text-center md:text-left">
               <h1 className="text-3xl font-black tracking-tight flex items-center gap-3 italic uppercase leading-none">{shop?.name}</h1>
-              <p className="flex items-center gap-1.5 text-slate-400 font-black text-[10px] mt-2 uppercase tracking-widest"><MapPin size={14} className="text-red-500"/> {shop?.postcode || "Location Not Set"}</p>
+              <p className="flex items-center justify-center md:justify-start gap-1.5 text-slate-400 font-black text-[10px] mt-2 uppercase tracking-widest"><MapPin size={14} className="text-red-500"/> {shop?.postcode || "Location Not Set"}</p>
             </div>
-            
-            <div className="flex items-center gap-2 relative">
-                {!pushEnabled && (
-                  <button onClick={handleEnablePush} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse" title="Enable Alerts">
-                    <BellRing size={24} />
-                  </button>
-                )}
 
-                <button onClick={() => {
-                    const nextState = !soundEnabled;
-                    setSoundEnabled(nextState);
-                    const audioEl = document.getElementById("bookingAlert");
-                    if (audioEl) {
-                        audioEl.play().then(() => {
-                           if (!nextState) audioEl.pause();
-                        }).catch(() => {});
-                    }
-                }} className={`p-4 rounded-2xl transition-all ${soundEnabled ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-50 text-slate-400'}`}>
-                   {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-                </button>
-                
-                <div className="flex flex-col items-center gap-2 group">
-                  <button onClick={() => setIsEditingSettings(true)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm group-hover:shadow-md">
-                    <Settings size={24} />
-                  </button>
-                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest italic">Shop Setup</span>
-                </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
-            <Link 
-              href={shop?.subscription_tier === 'pro' ? "/dashboard/staff" : "#"} 
-              onClick={handleTeamClick}
-              className={`flex items-center justify-center gap-2 px-4 py-5 rounded-2xl font-black text-[10px] uppercase transition-all text-center relative overflow-hidden group ${
-                shop?.subscription_tier === 'pro' 
-                  ? 'bg-slate-900 text-white hover:bg-blue-600 shadow-lg' 
-                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-              }`}
+            <button 
+              onClick={() => setShowRevenue(!showRevenue)}
+              className="bg-slate-900 text-white p-4 rounded-3xl flex items-center gap-4 min-w-[180px] shadow-xl hover:bg-slate-800 transition-all active:scale-95 group"
             >
-              {shop?.subscription_tier === 'pro' ? <UserPlus size={18} /> : <Lock size={16} />}
-              <span>Team</span>
-            </Link>
-
-            <button onClick={() => setIsEditingMenu(true)} className="px-4 py-5 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Scissors size={18} /> Menu</button>
-            <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Walk-In</button>
-            
-            <button onClick={handleBillingPortal} className="px-4 py-5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2">
-              <CreditCard size={18} /> Billing
+              <div className="bg-blue-600 p-2.5 rounded-2xl text-white group-hover:scale-110 transition-transform">
+                {showRevenue ? <TrendingUp size={20} /> : <Eye size={20} />}
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] font-black uppercase text-blue-400 tracking-tighter leading-none mb-1 italic">Today's Total</p>
+                <p className="text-2xl font-black leading-none italic uppercase">
+                  {showRevenue ? `£${calculateRevenue()}` : "••••••"}
+                </p>
+              </div>
             </button>
-
-            <button onClick={toggleStatus} className={`px-4 py-5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 ${shop?.is_open ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-50 text-red-500 shadow-red-200'}`}><Power size={18} className="inline mr-2" /> {shop?.is_open ? "OPEN" : "CLOSED"}</button>
           </div>
+
+          <div className="flex items-center justify-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+            
+            {!pushEnabled && (
+              <button onClick={handleEnablePush} className="p-5 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse">
+                <BellRing size={24} />
+              </button>
+            )}
+
+            <button onClick={toggleSound} className={`p-5 rounded-2xl transition-all shadow-sm active:scale-95 ${soundEnabled ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>
+               {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
+            </button>
+            
+            <div className="relative">
+              {showSetupNudge && (
+                <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 bg-blue-600 text-white p-3 rounded-2xl shadow-2xl z-50 animate-bounce">
+                  <p className="text-[10px] font-black uppercase leading-tight text-center italic">
+                    👋 Update shop info <br/>hours & reviews!
+                  </p>
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-blue-600"></div>
+                  
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setShowSetupNudge(false); }}
+                    className="absolute -top-2 -right-2 bg-slate-900 text-white rounded-full p-1 border border-white/20"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+
+              <button 
+                onClick={() => { setIsEditingSettings(true); setShowSetupNudge(false); }} 
+                className="p-5 bg-slate-100 text-slate-900 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 relative"
+              >
+                {showSetupNudge && <span className="absolute inset-0 rounded-2xl bg-blue-500/30 animate-ping"></span>}
+                <Settings size={24} className="relative z-10" />
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 w-full mb-8">
+          <Link 
+            href={shop?.subscription_tier === 'pro' ? "/dashboard/staff" : "#"} 
+            onClick={handleTeamClick}
+            className={`flex items-center justify-center gap-2 px-4 py-5 rounded-2xl font-black text-[10px] uppercase transition-all text-center relative overflow-hidden group ${
+              shop?.subscription_tier === 'pro' 
+                ? 'bg-slate-900 text-white hover:bg-blue-600 shadow-lg' 
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+            }`}
+          >
+            {shop?.subscription_tier === 'pro' ? <UserPlus size={18} /> : <Lock size={16} />}
+            <span>Team</span>
+          </Link>
+
+          <button onClick={() => setIsEditingMenu(true)} className="px-4 py-5 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Scissors size={18} /> Menu</button>
+          <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Walk-In</button>
+          
+          <button onClick={handleBillingPortal} className="px-4 py-5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2">
+            <CreditCard size={18} /> Billing
+          </button>
+
+          <button onClick={toggleStatus} className={`px-4 py-5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 ${shop?.is_open ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-50 text-red-500 shadow-red-200'}`}><Power size={18} className="inline mr-2" /> {shop?.is_open ? "OPEN" : "CLOSED"}</button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
@@ -700,7 +769,7 @@ export default function BarberDashboard() {
               </div>
             </section>
 
-            {/* MARKETING SECTION FOR PRINTABLE POSTER */}
+            {/* MARKETING SECTION */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
