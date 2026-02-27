@@ -31,7 +31,6 @@ function PwaPrompt() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) setIsInstalled(true);
     
-    // 🔥 NEW: Added desktop detection
     const ua = navigator.userAgent.toLowerCase();
     if (ua.indexOf("android") > -1) {
       setDevice("android");
@@ -105,12 +104,17 @@ export default function StaffGoldenDashboard() {
   const [pushEnabled, setPushEnabled] = useState(false); 
   
   const bookingAudio = useRef(null);
+  const soundEnabledRef = useRef(soundEnabled);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setBaseUrl(window.location.origin);
     }
   }, []);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   useEffect(() => {
     const initOneSignal = async () => {
@@ -146,12 +150,23 @@ export default function StaffGoldenDashboard() {
     
     fetchInitialData(bId, sId);
 
+    // 🔥 UPDATED REALTIME LISTENER FOR STAFF
     const channel = supabase.channel('staff-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
-        if (soundEnabled && payload.eventType === 'INSERT') bookingAudio.current.play().catch(() => {});
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
+        // Only ping if the booking is NOT unverified (or is a walk-in)
+        const shouldPing = payload.new.status !== 'unverified' || payload.new.client_name === "Walk-in Client";
+        if (soundEnabledRef.current && shouldPing) {
+          bookingAudio.current.play().catch(() => {});
+        }
         fetchBookings(bId, sId);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
+        // If it just flipped from Unverified to Pending, Play the Ping!
+        if (payload.old.status === 'unverified' && payload.new.status === 'pending') {
+          if (soundEnabledRef.current) {
+            bookingAudio.current.play().catch(() => {});
+          }
+        }
         fetchBookings(bId, sId);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'barbers', filter: `id=eq.${bId}` }, (payload) => {
@@ -160,7 +175,7 @@ export default function StaffGoldenDashboard() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [soundEnabled]);
+  }, []); // Remove soundEnabled from dependency so we don't restart channel on mute/unmute
 
   const fetchInitialData = async (bId, sId) => {
     setLoading(true);
@@ -279,7 +294,6 @@ export default function StaffGoldenDashboard() {
     if (!shop || !barber) return;
     const formatT = (d) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     const now = new Date();
-    // 🔥 AUTO-TIMING: Uses the service duration exactly like the owner dashboard
     const end = new Date(now.getTime() + (Number(service.duration) || 30) * 60000);
 
     const { error } = await supabase.from("bookings").insert([{
@@ -522,16 +536,16 @@ export default function StaffGoldenDashboard() {
                         </div>
                         <div>
                           <p className={`font-black text-xl uppercase italic ${b.status === 'rescheduled' ? 'text-blue-600' : 'text-slate-900'}`}>{b.client_name}</p>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            {b.status === 'unverified' ? '⏳ Awaiting Verify' : 
-                             b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : 
-                             b.service_name}
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            {b.status === 'unverified' ? (
+                              <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[8px] animate-pulse">Awaiting Email</span>
+                            ) : b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : 
+                               b.service_name}
                           </p>
                         </div>
                       </div>
                       <div className="flex gap-2">
                         {b.status === 'confirmed' ? (
-                          // 🔥 UI UPGRADE: Finish Button with text
                           <button onClick={() => updateStatus(b.id, 'completed')} className="px-6 py-4 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all font-black text-xs uppercase flex items-center gap-2 italic border border-green-400">
                             <CheckCircle size={20} strokeWidth={3} /> Finish
                           </button>
@@ -546,7 +560,6 @@ export default function StaffGoldenDashboard() {
                    <div className="flex gap-2 pt-2 border-t border-slate-50">
                       <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white italic"><XCircle size={14}/> Cancel</button>
                       
-                      {/* 🔥 LOGIC FIX: Hide Change/Phone for Walk-ins */}
                       {b.client_name !== "Walk-in Client" && (
                         <>
                           <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic"><RefreshCcw size={14}/> Change</button>
@@ -606,7 +619,7 @@ export default function StaffGoldenDashboard() {
         </div>
       )}
 
-      {/* 🔥 RESCHEDULE MODAL - FIXED TEXT COLOR */}
+      {/* RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">

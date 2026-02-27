@@ -6,7 +6,7 @@ import {
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
   CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock,
-  AlertTriangle, TrendingUp, Eye, EyeOff, Music
+  AlertTriangle, TrendingUp, Eye, EyeOff, Music, MailWarning
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -119,6 +119,7 @@ function PwaPrompt() {
 function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
   const [timeLeft, setTimeLeft] = useState(660);
   const isWalkIn = b.client_name === "Walk-in Client";
+  const isUnverified = b.status === "unverified";
 
   useEffect(() => {
     if (isWalkIn) return;
@@ -141,13 +142,19 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
 
   return (
     <div className={`p-6 rounded-[2.5rem] border-4 transition-all duration-300 mb-4 ${
-      isUrgent ? 'bg-red-50 border-red-500 animate-booking-pulse' : 'bg-white border-slate-50 shadow-sm'
+      isUrgent ? 'bg-red-50 border-red-500 animate-booking-pulse' : 
+      isUnverified ? 'bg-amber-50 border-amber-200 opacity-80' : 'bg-white border-slate-50 shadow-sm'
     }`}>
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-left">
           <Avatar name={b.client_name || "W"} />
           <div>
-            <h3 className="text-2xl font-black text-slate-900 leading-tight">{b.client_name || "Walk-in"}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">{b.client_name || "Walk-in"}</h3>
+              {isUnverified && (
+                <span className="bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter animate-pulse">Awaiting Email</span>
+              )}
+            </div>
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
               {b.barber_name && <span className="text-blue-600">{b.barber_name} • </span>}
               {b.service_name} • {b.booking_time}
@@ -248,10 +255,15 @@ export default function BarberDashboard() {
     
     fetchInitialData(shopId);
 
+    // 🔥 UPDATED REALTIME MASTER LISTENER
     const channel = supabase.channel('dashboard-realtime-master')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings' }, (payload) => {
         if (payload.new && String(payload.new.shop_id) === String(shopId)) {
-          if (soundEnabledRef.current) {
+          
+          // Logic: Only play sound if it's a Walk-in OR an already verified booking
+          const shouldAlertNow = payload.new.status !== 'unverified' || payload.new.client_name === "Walk-in Client";
+
+          if (shouldAlertNow && soundEnabledRef.current) {
             const audioEl = document.getElementById("bookingAlert");
             if (audioEl) {
               audioEl.src = `/${selectedSoundRef.current}.mp3`;
@@ -264,7 +276,20 @@ export default function BarberDashboard() {
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, (payload) => {
-          if (payload.new && String(payload.new.shop_id) === String(shopId)) fetchBookings(shopId);
+          if (payload.new && String(payload.new.shop_id) === String(shopId)) {
+            
+            // Logic: If the booking just became verified (Yellow -> Green)
+            if (payload.old.status === 'unverified' && payload.new.status === 'pending') {
+              if (soundEnabledRef.current) {
+                const audioEl = document.getElementById("bookingAlert");
+                if (audioEl) {
+                  audioEl.src = `/${selectedSoundRef.current}.mp3`;
+                  audioEl.play().catch(e => console.error("Audio blocked:", e));
+                }
+              }
+            }
+            fetchBookings(shopId);
+          }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'barbers' }, (payload) => {
           if (payload.new && String(payload.new.shop_id) === String(shopId)) fetchBarbers(shopId);
@@ -753,13 +778,10 @@ export default function BarberDashboard() {
                       <div className="flex gap-2 justify-end">
                         {b.status === 'confirmed' ? (
                           <>
-                            {/* 🔥 Logic Fix: Hide Phone for walk-ins */}
                             {b.client_name !== "Walk-in Client" && (
                               <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg"><Phone size={20}/></a>
                             )}
                             <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20"><XCircle size={22} /></button>
-                            
-                            {/* 🔥 UI Upgrade: Bold "Finish" Button */}
                             <button onClick={() => updateBookingStatus(b, 'completed')} className="px-6 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-green-400 transition-all border border-green-400 flex items-center gap-2 italic">
                               <CheckCircle size={20} strokeWidth={3} /> Finish
                             </button>
@@ -909,7 +931,7 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* SERVICE MENU MODAL - UPDATED WITH DURATION INPUT */}
+      {/* SERVICE MENU MODAL */}
       {isEditingMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
@@ -928,7 +950,6 @@ export default function BarberDashboard() {
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block italic">Price £</label>
                     <input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900 border border-slate-100" />
                   </div>
-                  {/* 🔥 NEW: Duration Input in Menu Editor */}
                   <div className="w-24 text-left">
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block italic">Mins</label>
                     <input type="number" value={item.duration} onChange={(e) => { const updated = [...menuItems]; updated[idx].duration = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900 border border-slate-100" />
@@ -966,7 +987,7 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* WALK-IN MENU - LIST SELECTION */}
+      {/* WALK-IN MENU */}
       {showServiceMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95">
@@ -984,7 +1005,7 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* 🔥 RESCHEDULE MODAL - FIXED TEXT COLOR & VISIBILITY */}
+      {/* RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left font-sans">

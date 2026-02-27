@@ -25,7 +25,7 @@ function VerifyContent() {
 
   const handleVerification = async () => {
     try {
-      // Switches the booking from 'unverified' (Yellow) to 'pending' (Active/Green)
+      // 🔥 The Fix: Switches the booking from 'unverified' (Yellow) to 'pending' (Active/Green)
       const { data, error } = await supabase
         .from("bookings")
         .update({ status: 'pending' }) 
@@ -33,6 +33,7 @@ function VerifyContent() {
         .eq("status", "unverified")
         .select();
 
+      // If no rows were updated, it might already be verified or the link is wrong
       if (error || !data || data.length === 0) {
         setStatus("error");
       } else {
@@ -61,7 +62,7 @@ function VerifyContent() {
           <CheckCircle className="w-16 h-16 text-green-500 mb-6" />
           <h1 className="text-3xl font-black italic uppercase tracking-tighter mb-4 text-slate-900">Verified!</h1>
           <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-8 leading-relaxed">
-            Booking confirmed. Your slot is now locked in and the barber has been notified.
+            Booking confirmed. Your slot is now locked in and the barber has been notified. See you in the chair.
           </p>
           <Link href="/" className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-lg hover:bg-blue-700 transition-all uppercase italic block text-center">
             Return Home
