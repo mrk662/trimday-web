@@ -150,18 +150,19 @@ export default function StaffGoldenDashboard() {
     
     fetchInitialData(bId, sId);
 
-    // 🔥 UPDATED REALTIME LISTENER FOR STAFF
     const channel = supabase.channel('staff-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
-        // Only ping if the booking is NOT unverified (or is a walk-in)
-        const shouldPing = payload.new.status !== 'unverified' || payload.new.client_name === "Walk-in Client";
-        if (soundEnabledRef.current && shouldPing) {
+        // 🔥 UPDATE: Ignore unverified bookings live. They don't exist to staff yet.
+        if (payload.new.status === 'unverified') return;
+
+        if (soundEnabledRef.current) {
           bookingAudio.current.play().catch(() => {});
         }
         fetchBookings(bId, sId);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `shop_id=eq.${sId}` }, (payload) => {
-        // If it just flipped from Unverified to Pending, Play the Ping!
+        // 🔥 UPDATE: If a booking flipped from Unverified to Pending (Customer verified email)
+        // This is when we PING the staff member.
         if (payload.old.status === 'unverified' && payload.new.status === 'pending') {
           if (soundEnabledRef.current) {
             bookingAudio.current.play().catch(() => {});
@@ -175,7 +176,7 @@ export default function StaffGoldenDashboard() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, []); // Remove soundEnabled from dependency so we don't restart channel on mute/unmute
+  }, []); 
 
   const fetchInitialData = async (bId, sId) => {
     setLoading(true);
@@ -217,17 +218,18 @@ export default function StaffGoldenDashboard() {
       .eq("shop_id", sId)
       .eq('booking_date', today)
       .neq("status", "completed")
-      .neq("status", "cancelled");
+      .neq("status", "cancelled")
+      .neq("status", "unverified"); // 🔥 UPDATE: Hide unverified from the staff dashboard
 
     const myChair = data?.filter(b => 
       String(b.barber_id) === String(bId) && 
-      ["confirmed", "pending", "unverified", "rescheduled"].includes(b.status)
+      ["confirmed", "pending", "rescheduled"].includes(b.status)
     ) || [];
     setMyBookings(myChair);
     
     const openPings = data?.filter(b => 
       b.barber_id === null && 
-      ["pending", "unverified"].includes(b.status)
+      b.status === "pending"
     ) || [];
     setBroadcast(openPings);
   };
@@ -500,9 +502,7 @@ export default function StaffGoldenDashboard() {
               <div key={b.id} className="p-6 bg-blue-600 text-white rounded-[2.5rem] flex justify-between items-center shadow-xl border-4 border-blue-400 animate-in slide-in-from-top-4">
                 <div>
                   <p className="font-black text-xl leading-tight uppercase italic">{b.client_name}</p>
-                  <p className="text-xs font-bold opacity-80 mt-1">
-                    {b.status === 'unverified' ? '⏳ Email Pending' : `${b.service_name} • ${b.booking_time}`}
-                  </p>
+                  <p className="text-xs font-bold opacity-80 mt-1">{b.service_name} • {b.booking_time}</p>
                 </div>
                 <button onClick={() => claimBooking(b.id)} className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all italic">Claim</button>
               </div>
@@ -525,22 +525,14 @@ export default function StaffGoldenDashboard() {
                    <div className="flex justify-between items-center">
                       <div className="flex gap-4 items-center">
                         <div className={`p-4 rounded-2xl min-w-[85px] text-center ${
-                          b.status === 'unverified' ? 'bg-amber-100 text-amber-600 border border-amber-200' : 
-                          b.status === 'rescheduled' ? 'bg-orange-500 text-white animate-pulse' : 
-                          'bg-slate-900 text-white'
+                          b.status === 'rescheduled' ? 'bg-orange-500 text-white animate-pulse' : 'bg-slate-900 text-white'
                         }`}>
-                          <span className="font-black text-xs">{
-                            b.status === 'rescheduled' ? <Clock size={16} className="mx-auto" /> : 
-                            b.booking_time.split(' ')[0]
-                          }</span>
+                          <span className="font-black text-xs">{b.status === 'rescheduled' ? <Clock size={16} className="mx-auto" /> : b.booking_time.split(' ')[0]}</span>
                         </div>
                         <div>
                           <p className={`font-black text-xl uppercase italic ${b.status === 'rescheduled' ? 'text-blue-600' : 'text-slate-900'}`}>{b.client_name}</p>
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            {b.status === 'unverified' ? (
-                              <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[8px] animate-pulse">Awaiting Email</span>
-                            ) : b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : 
-                               b.service_name}
+                             {b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : b.service_name}
                           </p>
                         </div>
                       </div>
@@ -622,7 +614,7 @@ export default function StaffGoldenDashboard() {
       {/* RESCHEDULE MODAL */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left font-sans">
             <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900 uppercase italic">Propose New Time</h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest italic leading-tight">Suggesting to {reschedulingBooking.client_name}</p>
             <div className="relative mb-6">

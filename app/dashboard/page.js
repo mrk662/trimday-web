@@ -136,8 +136,6 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
     return () => clearInterval(timer);
   }, [b.created_at, b.id, onUpdate, isWalkIn]);
 
-  const mins = Math.floor(timeLeft / 60);
-  const secs = timeLeft % 60;
   const isUrgent = timeLeft < 120 && !isWalkIn;
 
   return (
@@ -172,7 +170,7 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
               Change
             </button>
           )}
-          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 italic ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>
+          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 italic ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-50 text-white hover:bg-green-600'}`}>
             <CheckCircle size={20} /> {isWalkIn ? "Finish" : "Accept"}
           </button>
         </div>
@@ -255,15 +253,14 @@ export default function BarberDashboard() {
     
     fetchInitialData(shopId);
 
-    // 🔥 UPDATED REALTIME MASTER LISTENER
+    // 🔥 UPDATED REALTIME MASTER LISTENER: Invisible logic applied
     const channel = supabase.channel('dashboard-realtime-master')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings' }, (payload) => {
         if (payload.new && String(payload.new.shop_id) === String(shopId)) {
+          // UPDATE: Ignore live unverified inserts entirely
+          if (payload.new.status === 'unverified') return;
           
-          // Logic: Only play sound if it's a Walk-in OR an already verified booking
-          const shouldAlertNow = payload.new.status !== 'unverified' || payload.new.client_name === "Walk-in Client";
-
-          if (shouldAlertNow && soundEnabledRef.current) {
+          if (soundEnabledRef.current) {
             const audioEl = document.getElementById("bookingAlert");
             if (audioEl) {
               audioEl.src = `/${selectedSoundRef.current}.mp3`;
@@ -277,8 +274,7 @@ export default function BarberDashboard() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, (payload) => {
           if (payload.new && String(payload.new.shop_id) === String(shopId)) {
-            
-            // Logic: If the booking just became verified (Yellow -> Green)
+            // UPDATE: Trigger sound ONLY when flipping from unverified -> pending
             if (payload.old.status === 'unverified' && payload.new.status === 'pending') {
               if (soundEnabledRef.current) {
                 const audioEl = document.getElementById("bookingAlert");
@@ -353,10 +349,11 @@ export default function BarberDashboard() {
       .eq("shop_id", id) 
       .eq('booking_date', today)
       .neq("status", "cancelled") 
+      .neq("status", "unverified") // 🔥 UPDATE: Hide unverified from the schedule entirely
       .order("created_at", { ascending: false });
 
     setAllTodayBookings(data || []);
-    setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
+    setPendingBookings(data?.filter(b => ["pending", "active"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
   };
 
