@@ -16,6 +16,17 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "TrimDay | Professional Barber Management",
   description: "Secure booking and management for the modern UK barber shop.",
+  
+  // 🔥 NEW: Apple App Icon & PWA Meta Tags
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png', // Tells iPhones to use this image for the home screen
+  },
+  appleWebApp: {
+    capable: true, // Removes the Safari URL bar when launched from home screen
+    statusBarStyle: "black-translucent",
+    title: "TrimDay", // The name that appears under the app icon on the home screen
+  },
 };
 
 export default function RootLayout({ children }) {

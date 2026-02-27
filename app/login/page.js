@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Lock, Phone, Loader2, AlertCircle, Scissors, ChevronLeft } from "lucide-react"; // 🔥 Added ChevronLeft
+import { Lock, Phone, Loader2, AlertCircle, Scissors, ChevronLeft } from "lucide-react"; 
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 
@@ -122,11 +122,21 @@ export default function BarberLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white font-black text-lg py-5 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95 disabled:opacity-50 text-center"
+            className="w-full bg-black text-white font-black text-lg py-5 rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95 disabled:opacity-50 text-center uppercase italic"
           >
             {loading ? <Loader2 className="animate-spin text-center" /> : "Sign In"}
           </button>
         </form>
+
+        {/* 🔥 NEW: Forgot Password Link */}
+        <div className="mt-6 text-center">
+          <Link 
+            href="/forgot-password" 
+            className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic hover:text-blue-600 transition-colors"
+          >
+            Forgot dashboard password?
+          </Link>
+        </div>
 
         <p className="text-center mt-8 text-slate-400 font-bold text-xs text-center">
           New here? <Link href="/join" className="text-blue-600 hover:underline">List your shop</Link>

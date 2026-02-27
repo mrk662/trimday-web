@@ -58,7 +58,6 @@ function PwaPrompt() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) setIsInstalled(true);
     
-    // 🔥 NEW: Added desktop detection
     const ua = navigator.userAgent.toLowerCase();
     if (ua.indexOf("android") > -1) {
       setDevice("android");
@@ -158,16 +157,16 @@ function PendingRequestCard({ b, onUpdate, onReschedule, getTimeAgo }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => onUpdate(b, 'cancelled')} className="px-6 py-4 bg-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2">
+          <button onClick={() => onUpdate(b, 'cancelled')} className="px-6 py-4 bg-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2 italic">
             <XCircle size={18} /> {isWalkIn ? "Cancel" : "Decline"}
           </button>
           {!isWalkIn && (
-            <button onClick={() => onReschedule(b)} className="px-6 py-4 bg-blue-100 text-blue-600 rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 hover:text-white transition-all">
+            <button onClick={() => onReschedule(b)} className="px-6 py-4 bg-blue-100 text-blue-600 rounded-2xl font-black text-[10px] uppercase hover:bg-blue-600 hover:text-white transition-all italic">
               Change
             </button>
           )}
-          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-50 text-white hover:bg-green-600'}`}>
-            <CheckCircle size={20} /> {isWalkIn ? "Finish Trim" : "Accept"}
+          <button onClick={() => onUpdate(b, 'confirmed')} className={`px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all flex items-center justify-center gap-2 italic ${isUrgent ? 'bg-red-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>
+            <CheckCircle size={20} /> {isWalkIn ? "Finish" : "Accept"}
           </button>
         </div>
       </div>
@@ -188,45 +187,23 @@ export default function BarberDashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
-  
-  // 🔥 RESTORED SOUND MENU STATE
   const [selectedSound, setSelectedSound] = useState('ping1');
   const [showSoundSettings, setShowSoundSettings] = useState(false);
-  
   const [pushEnabled, setPushEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk");
-
   const [deleteTarget, setDeleteTarget] = useState(null);
-  
   const [isEditingSettings, setIsEditingSettings] = useState(false);
-  const [shopSettings, setShopSettings] = useState({
-    name: "",
-    shop_photo_url: "",
-    google_review_url: "",
-    business_phone: "",
-  });
-
+  const [shopSettings, setShopSettings] = useState({ name: "", shop_photo_url: "", google_review_url: "", business_phone: "" });
   const [businessHours, setBusinessHours] = useState(DEFAULT_HOURS);
-  
   const [showRevenue, setShowRevenue] = useState(false);
   const [showSetupNudge, setShowSetupNudge] = useState(true);
 
   const soundEnabledRef = useRef(soundEnabled);
   const selectedSoundRef = useRef(selectedSound);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setBaseUrl(window.location.origin);
-    }
-  }, []);
-
-  useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
-
-  useEffect(() => {
-    selectedSoundRef.current = selectedSound;
-  }, [selectedSound]);
+  useEffect(() => { if (typeof window !== "undefined") { setBaseUrl(window.location.origin); } }, []);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+  useEffect(() => { selectedSoundRef.current = selectedSound; }, [selectedSound]);
 
   useEffect(() => {
     const initOneSignal = async () => {
@@ -500,7 +477,9 @@ export default function BarberDashboard() {
     if (!shop?.id) return;
     const formatT = (d) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     const nowTime = new Date();
-    const endTime = new Date(nowTime.getTime() + service.duration * 60000); 
+    
+    // 🔥 AUTO-TIMING: Pulls from service.duration
+    const endTime = new Date(nowTime.getTime() + (Number(service.duration) || 30) * 60000); 
 
     const { error } = await supabase.from("bookings").insert([{
       shop_id: shop.id, client_name: "Walk-in Client", client_phone: "Walk-in",
@@ -640,16 +619,13 @@ export default function BarberDashboard() {
             </button>
           </div>
 
-          {/* 🔥 PERFECTLY ALIGNED ICON BAR */}
           <div className="flex items-center justify-center gap-3 w-full md:w-auto mt-4 md:mt-0 relative">
-            
             {!pushEnabled && (
               <button onClick={handleEnablePush} className="p-5 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse" title="Enable Alerts">
                 <BellRing size={24} />
               </button>
             )}
 
-            {/* SOUND TOGGLE & MENU */}
             <div className="relative">
               <button onClick={() => {
                 if (!soundEnabled) {
@@ -680,7 +656,6 @@ export default function BarberDashboard() {
               )}
             </div>
             
-            {/* SETTINGS GEAR WITH FLOATING TEXT */}
             <div className="relative">
               {showSetupNudge && (
                 <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 bg-blue-600 text-white p-3 rounded-2xl shadow-2xl z-50 animate-bounce">
@@ -706,7 +681,6 @@ export default function BarberDashboard() {
                 <Settings size={24} className="relative z-10" />
               </button>
               
-              {/* Absolute positioned text so it doesn't break alignment */}
               <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Shop Setup</span>
             </div>
           </div>
@@ -728,13 +702,13 @@ export default function BarberDashboard() {
           </Link>
 
           <button onClick={() => setIsEditingMenu(true)} className="px-4 py-5 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-50 transition-all flex items-center justify-center gap-2"><Scissors size={18} /> Menu</button>
-          <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Walk-In</button>
+          <button onClick={() => setShowServiceMenu(true)} className="px-4 py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 italic">Walk-In</button>
           
-          <button onClick={handleBillingPortal} className="px-4 py-5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2">
+          <button onClick={handleBillingPortal} className="px-4 py-5 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2 italic">
             <CreditCard size={18} /> Billing
           </button>
 
-          <button onClick={toggleStatus} className={`px-4 py-5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 ${shop?.is_open ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-50 text-red-500 shadow-red-200'}`}><Power size={18} className="inline mr-2" /> {shop?.is_open ? "OPEN" : "CLOSED"}</button>
+          <button onClick={toggleStatus} className={`px-4 py-5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 italic ${shop?.is_open ? 'bg-green-500 text-white shadow-green-200' : 'bg-red-50 text-red-500 shadow-red-200'}`}><Power size={18} className="inline mr-2" /> {shop?.is_open ? "OPEN" : "CLOSED"}</button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
@@ -771,7 +745,7 @@ export default function BarberDashboard() {
                         </div>
                         <div className="truncate">
                           <p className={`font-black text-lg ${b.status === 'rescheduled' ? 'text-blue-400' : 'text-white'}`}>{b.client_name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate italic">
                             {b.status === 'rescheduled' ? `Awaiting: ${b.proposed_time}` : `${b.barber_name || "Any Barber"} • ${b.service_name}`}
                           </p>
                         </div>
@@ -779,9 +753,16 @@ export default function BarberDashboard() {
                       <div className="flex gap-2 justify-end">
                         {b.status === 'confirmed' ? (
                           <>
-                            <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg"><Phone size={20}/></a>
+                            {/* 🔥 Logic Fix: Hide Phone for walk-ins */}
+                            {b.client_name !== "Walk-in Client" && (
+                              <a href={`tel:${b.client_phone}`} className="p-4 bg-white/10 rounded-2xl text-white hover:bg-white/20 transition-all shadow-lg"><Phone size={20}/></a>
+                            )}
                             <button onClick={() => updateBookingStatus(b, 'cancelled')} className="p-4 bg-red-500/10 rounded-2xl text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-lg border border-red-500/20"><XCircle size={22} /></button>
-                            <button onClick={() => updateBookingStatus(b, 'completed')} className="p-4 bg-green-500 rounded-2xl text-white hover:bg-green-400 transition-all shadow-lg border border-green-400"><CheckCircle size={22} strokeWidth={3} /></button>
+                            
+                            {/* 🔥 UI Upgrade: Bold "Finish" Button */}
+                            <button onClick={() => updateBookingStatus(b, 'completed')} className="px-6 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-green-400 transition-all border border-green-400 flex items-center gap-2 italic">
+                              <CheckCircle size={20} strokeWidth={3} /> Finish
+                            </button>
                           </>
                         ) : (
                           <div className="flex items-center gap-3">
@@ -799,7 +780,7 @@ export default function BarberDashboard() {
 
           <div className="space-y-8 w-full">
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
-              <h2 className="text-xl font-black mb-8 flex items-center gap-2 uppercase italic tracking-tighter"><User className="text-blue-600" /> Staff on Duty</h2>
+              <h2 className="text-xl font-black mb-8 flex items-center gap-2 uppercase italic tracking-tighter text-slate-900"><User className="text-blue-600" /> Staff on Duty</h2>
               <div className="space-y-4">
                 {barbers.map(barber => {
                   const isBusy = confirmedSchedule.some(b => b.barber_id === barber.id);
@@ -819,15 +800,13 @@ export default function BarberDashboard() {
               </div>
             </section>
 
-            {/* MARKETING SECTION FOR PRINTABLE POSTER */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
-              <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
+              <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter text-slate-900"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
               
               <div className="bg-slate-50 p-6 rounded-[2rem] flex flex-col items-center mb-6 border-2 border-dashed border-slate-200">
                 <QRCode id="shop-qr" value={`${baseUrl}/shop/${shop?.slug}`} size={160} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={35} logoHeight={35} bgColor="#f8fafc" fgColor="#0f172a" quietZone={25} />
                 
-                {/* HIDDEN HIGH-RES PRINTABLE POSTER */}
                 <div className="hidden">
                   <QRCode id="shop-qr-highres" value={`${baseUrl}/shop/${shop?.slug}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
                 </div>
@@ -895,14 +874,14 @@ export default function BarberDashboard() {
                             type="time" 
                             value={businessHours[day]?.open || "09:00"} 
                             onChange={(e) => setBusinessHours({...businessHours, [day]: {...businessHours[day], open: e.target.value}})}
-                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600"
+                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600 text-slate-900"
                           />
                           <span className="text-slate-300 font-bold">-</span>
                           <input 
                             type="time" 
                             value={businessHours[day]?.close || "18:00"} 
                             onChange={(e) => setBusinessHours({...businessHours, [day]: {...businessHours[day], close: e.target.value}})}
-                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600"
+                            className="bg-white p-2 rounded-xl font-bold text-[10px] border border-slate-200 outline-none focus:border-blue-600 text-slate-900"
                           />
                         </>
                       ) : (
@@ -921,8 +900,8 @@ export default function BarberDashboard() {
             </div>
 
             <div className="flex gap-4 mt-10">
-              <button onClick={() => setIsEditingSettings(false)} className="flex-1 bg-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase text-slate-500 hover:bg-slate-200 transition-colors">Discard</button>
-              <button onClick={saveSettings} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+              <button onClick={() => setIsEditingSettings(false)} className="flex-1 bg-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase text-slate-500 hover:bg-slate-200 transition-colors italic">Discard</button>
+              <button onClick={saveSettings} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all active:scale-95 italic">
                 <Save size={16}/> Save Changes
               </button>
             </div>
@@ -930,34 +909,39 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* SERVICE MENU MODAL */}
+      {/* SERVICE MENU MODAL - UPDATED WITH DURATION INPUT */}
       {isEditingMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-8">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-8 text-slate-900">
               <h3 className="text-2xl font-black uppercase italic tracking-tighter">Edit Menu</h3>
-              <button onClick={() => setIsEditingMenu(false)} className="text-slate-400 hover:text-slate-900"><X size={24} /></button>
+              <button onClick={() => setIsEditingMenu(false)} className="text-slate-400 hover:text-slate-900 transition-colors"><X size={24} /></button>
             </div>
             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-4 mb-8">
               {menuItems.map((item, idx) => (
-                <div key={idx} className="flex gap-3 items-end bg-slate-50 p-4 rounded-[2rem] border border-transparent hover:border-blue-100 transition-all">
-                  <div className="flex-1 text-left">
-                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Service Name</label>
-                    <input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" />
+                <div key={idx} className="flex flex-col md:flex-row gap-3 items-end bg-slate-50 p-4 rounded-[2rem] border border-transparent hover:border-blue-100 transition-all">
+                  <div className="flex-1 text-left w-full">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block italic">Service Name</label>
+                    <input type="text" value={item.name} onChange={(e) => { const updated = [...menuItems]; updated[idx].name = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900 border border-slate-100" />
                   </div>
                   <div className="w-24 text-left">
-                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Price £</label>
-                    <input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900" />
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block italic">Price £</label>
+                    <input type="number" value={item.price} onChange={(e) => { const updated = [...menuItems]; updated[idx].price = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900 border border-slate-100" />
                   </div>
-                  <button onClick={() => setDeleteTarget(idx)} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                  {/* 🔥 NEW: Duration Input in Menu Editor */}
+                  <div className="w-24 text-left">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block italic">Mins</label>
+                    <input type="number" value={item.duration} onChange={(e) => { const updated = [...menuItems]; updated[idx].duration = e.target.value; setMenuItems(updated); }} className="w-full bg-white p-3 rounded-xl outline-none font-bold text-sm text-slate-900 border border-slate-100" />
+                  </div>
+                  <button onClick={() => setDeleteTarget(idx)} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition-all h-[45px]">
                     <Trash2 size={18}/>
                   </button>
                 </div>
               ))}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setMenuItems([...menuItems, { name: "", duration: 30, price: 0 }])} className="flex-1 bg-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2"><Plus size={16}/> Add Service</button>
-              <button onClick={saveMenuChanges} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg"><Save size={16}/> Save</button>
+              <button onClick={() => setMenuItems([...menuItems, { name: "", duration: 30, price: 0 }])} className="flex-1 bg-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 italic hover:bg-slate-200 transition-colors"><Plus size={16}/> Add Service</button>
+              <button onClick={saveMenuChanges} className="flex-1 bg-blue-600 text-white py-5 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg italic hover:bg-blue-700 transition-all"><Save size={16}/> Save</button>
             </div>
           </div>
         </div>
@@ -972,7 +956,7 @@ export default function BarberDashboard() {
             </div>
             <h3 className="text-2xl font-black italic uppercase tracking-tighter text-slate-900 leading-none mb-3">Wait. Are you sure?</h3>
             <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed mb-8 text-center">
-              This will remove <span className="text-slate-900">"{menuItems[deleteTarget]?.name}"</span> from your menu permanently.
+              This will remove <span className="text-slate-900">"{menuItems[deleteTarget]?.name}"</span> permanently.
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={() => { setMenuItems(menuItems.filter((_, i) => i !== deleteTarget)); setDeleteTarget(null); }} className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase italic shadow-lg shadow-red-200 active:scale-95 transition-all">Yes, Delete It</button>
@@ -982,7 +966,7 @@ export default function BarberDashboard() {
         </div>
       )}
 
-      {/* WALK-IN MENU */}
+      {/* WALK-IN MENU - LIST SELECTION */}
       {showServiceMenu && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95">
@@ -990,29 +974,30 @@ export default function BarberDashboard() {
             <div className="grid gap-2 text-left">
               {menuItems.map((service, idx) => (
                 <button key={idx} onClick={() => confirmWalkIn(service)} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
-                  <div className="text-left text-left"><p className="font-black text-lg text-left">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase text-left">{service.duration} mins</p></div>
-                  <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black text-left">£{service.price}</span>
+                  <div className="text-left"><p className="font-black text-lg text-slate-900">{service.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase italic">{service.duration} mins</p></div>
+                  <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black">£{service.price}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowServiceMenu(false)} className="w-full mt-6 py-4 text-slate-400 font-black text-xs uppercase tracking-widest text-center text-left">Cancel</button>
+            <button onClick={() => setShowServiceMenu(false)} className="w-full mt-6 py-4 text-slate-400 font-black text-xs uppercase tracking-widest text-center italic">Cancel</button>
           </div>
         </div>
       )}
 
-      {/* RESCHEDULE MODAL */}
+      {/* 🔥 RESCHEDULE MODAL - FIXED TEXT COLOR & VISIBILITY */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
-            <h3 className="text-2xl font-black mb-2 tracking-tight text-left">Change Time</h3>
-            <div className="relative mb-6 text-left">
-              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-left" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
-                <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left font-sans">
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900 uppercase italic">Propose New Time</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest italic leading-tight">Suggesting to {reschedulingBooking.client_name}</p>
+            <div className="relative mb-6">
+              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-slate-900" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
+                <option value="" className="text-slate-400">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t} className="text-slate-900 font-bold">{t}</option>)}
               </select>
-              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-left" size={24} />
+              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-center">
-              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest text-center text-left">Cancel</button>
+              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest italic transition-colors hover:bg-slate-200">Cancel</button>
               <button onClick={async () => {
                 if (!newTimeInput) return;
                 await supabase.from("bookings").update({ status: 'rescheduled', proposed_time: newTimeInput }).eq("id", reschedulingBooking.id);
@@ -1025,7 +1010,7 @@ export default function BarberDashboard() {
                   }),
                 });
                 setReschedulingBooking(null); setNewTimeInput(""); fetchBookings(shop.id);
-              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest text-center">Send</button>
+              }} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl tracking-widest italic hover:bg-blue-700 transition-all">Send Request</button>
             </div>
           </div>
         </div>

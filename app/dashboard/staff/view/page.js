@@ -31,6 +31,7 @@ function PwaPrompt() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) setIsInstalled(true);
     
+    // 🔥 NEW: Added desktop detection
     const ua = navigator.userAgent.toLowerCase();
     if (ua.indexOf("android") > -1) {
       setDevice("android");
@@ -278,7 +279,8 @@ export default function StaffGoldenDashboard() {
     if (!shop || !barber) return;
     const formatT = (d) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
     const now = new Date();
-    const end = new Date(now.getTime() + service.duration * 60000);
+    // 🔥 AUTO-TIMING: Uses the service duration exactly like the owner dashboard
+    const end = new Date(now.getTime() + (Number(service.duration) || 30) * 60000);
 
     const { error } = await supabase.from("bookings").insert([{
       shop_id: shop.id, 
@@ -322,7 +324,6 @@ export default function StaffGoldenDashboard() {
     }
   };
 
-  // 🔥 AUDIO FIX: Wakes up browser audio API
   const toggleSound = () => {
     const audioEl = bookingAudio.current;
     if (!soundEnabled) {
@@ -340,7 +341,6 @@ export default function StaffGoldenDashboard() {
     }
   };
 
-  // 🔥 V2 PREMIUM DARK MODE POSTER
   const downloadQR = (canvasId, filename) => {
     const qrCanvas = document.getElementById(canvasId);
     if (!qrCanvas) return alert("QR not ready yet.");
@@ -396,7 +396,7 @@ export default function StaffGoldenDashboard() {
     downloadLink.click();
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-widest">Syncing Your Chair...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-black animate-pulse uppercase tracking-widest text-center">Syncing Your Chair...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 text-left font-sans">
@@ -408,7 +408,6 @@ export default function StaffGoldenDashboard() {
       <div className="max-w-xl mx-auto px-6 -mt-16 relative z-20">
         <PwaPrompt />
 
-        {/* 🔥 FIX: Clean white header with perfectly aligned icons below */}
         <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex flex-col mb-10 gap-6">
           <div className="flex justify-between items-center w-full">
             <div className="flex items-center gap-4">
@@ -441,7 +440,6 @@ export default function StaffGoldenDashboard() {
 
           <div className="w-full h-px bg-slate-50"></div>
 
-          {/* 🔥 FIX: Properly aligned icon row with text labels */}
           <div className="flex items-center justify-around w-full px-2 mt-2">
             {!pushEnabled && (
               <div className="flex flex-col items-center gap-2 relative">
@@ -533,7 +531,10 @@ export default function StaffGoldenDashboard() {
                       </div>
                       <div className="flex gap-2">
                         {b.status === 'confirmed' ? (
-                          <button onClick={() => updateStatus(b.id, 'completed')} className="p-5 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all"><CheckCircle size={24} /></button>
+                          // 🔥 UI UPGRADE: Finish Button with text
+                          <button onClick={() => updateStatus(b.id, 'completed')} className="px-6 py-4 bg-green-500 text-white rounded-2xl shadow-lg hover:bg-green-600 active:scale-90 transition-all font-black text-xs uppercase flex items-center gap-2 italic border border-green-400">
+                            <CheckCircle size={20} strokeWidth={3} /> Finish
+                          </button>
                         ) : b.status === 'rescheduled' ? (
                           <div className="bg-blue-100 text-blue-600 p-4 rounded-2xl"><RefreshCcw size={20} className="animate-spin" /></div>
                         ) : (
@@ -544,8 +545,14 @@ export default function StaffGoldenDashboard() {
 
                    <div className="flex gap-2 pt-2 border-t border-slate-50">
                       <button onClick={() => updateStatus(b.id, 'cancelled')} className="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-red-500 hover:text-white italic"><XCircle size={14}/> Cancel</button>
-                      <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic"><RefreshCcw size={14}/> Change</button>
-                      <a href={`tel:${b.client_phone}`} className="p-3 bg-slate-900 text-white rounded-xl active:scale-90 transition-transform"><Phone size={14}/></a>
+                      
+                      {/* 🔥 LOGIC FIX: Hide Change/Phone for Walk-ins */}
+                      {b.client_name !== "Walk-in Client" && (
+                        <>
+                          <button onClick={() => setReschedulingBooking(b)} className="flex-1 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-colors hover:bg-slate-200 italic"><RefreshCcw size={14}/> Change</button>
+                          <a href={`tel:${b.client_phone}`} className="p-3 bg-slate-900 text-white rounded-xl active:scale-90 transition-transform"><Phone size={14}/></a>
+                        </>
+                      )}
                    </div>
                 </div>
               ))
@@ -566,7 +573,6 @@ export default function StaffGoldenDashboard() {
               <QRCodeSVG value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={220} level="H" includeMargin={false} />
             </div>
 
-            {/* 🔥 HIDDEN HIGH-RES PRINTABLE POSTER (Used for drawing) */}
             <div className="hidden">
               <QRCode id="shop-qr-highres-emp" value={`${baseUrl}/shop/${shop?.slug || shop?.id}`} size={500} qrStyle="dots" eyeRadius={10} logoImage="/icon.png" logoWidth={100} logoHeight={100} bgColor="#ffffff" fgColor="#0f172a" quietZone={20} />
             </div>
@@ -584,37 +590,37 @@ export default function StaffGoldenDashboard() {
 
       {/* WALK-IN MENU */}
       {showWalkInMenu && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-3xl font-black text-slate-900 text-center mb-10 uppercase tracking-tighter italic">Quick Walk-In</h3>
-            <div className="grid gap-3">
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95">
+            <h3 className="text-2xl font-black text-slate-900 text-center mb-6 uppercase tracking-tighter italic">New Walk-In</h3>
+            <div className="grid gap-2 text-left">
               {(shop?.service_menu || []).map((s, idx) => (
-                <button key={idx} onClick={() => handleWalkIn(s)} className="p-6 rounded-[2rem] border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
-                  <div><p className="font-black text-xl uppercase italic">{s.name}</p><p className="text-[10px] text-slate-400 font-black uppercase">{s.duration} mins</p></div>
-                  <span className="text-blue-600 group-hover:text-blue-700 text-2xl italic font-black">£{s.price}</span>
+                <button key={idx} onClick={() => handleWalkIn(s)} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all flex justify-between items-center font-black group text-left">
+                  <div className="text-left"><p className="font-black text-lg text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase italic">{s.duration} mins</p></div>
+                  <span className="text-blue-600 group-hover:text-blue-700 text-xl italic font-black">£{s.price}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowWalkInMenu(false)} className="w-full mt-10 py-4 text-slate-400 font-black text-xs uppercase tracking-[0.3em] text-center">Nevermind</button>
+            <button onClick={() => setShowWalkInMenu(false)} className="w-full mt-6 py-4 text-slate-400 font-black text-xs uppercase tracking-widest text-center italic hover:text-slate-600 transition-colors">Cancel</button>
           </div>
         </div>
       )}
 
-      {/* RESCHEDULE MODAL */}
+      {/* 🔥 RESCHEDULE MODAL - FIXED TEXT COLOR */}
       {reschedulingBooking && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-2xl font-black mb-2 tracking-tight text-center uppercase italic">Propose New Time</h3>
-            <p className="text-[10px] font-bold text-slate-400 text-center uppercase mb-6 tracking-widest italic">Suggesting to {reschedulingBooking.client_name}</p>
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-left">
+            <h3 className="text-2xl font-black mb-2 tracking-tight text-slate-900 uppercase italic">Propose New Time</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest italic leading-tight">Suggesting to {reschedulingBooking.client_name}</p>
             <div className="relative mb-6">
-              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center uppercase italic" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
-                <option value="">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              <select className="w-full p-6 bg-slate-50 rounded-3xl text-2xl font-black appearance-none outline-none focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer text-center text-slate-900" value={newTimeInput} onChange={(e) => setNewTimeInput(e.target.value)}>
+                <option value="" className="text-slate-400">Select Time</option>{TIME_SLOTS.map(t => <option key={t} value={t} className="text-slate-900 font-bold">{t}</option>)}
               </select>
-              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={24} />
+              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-left" size={24} />
             </div>
             <div className="grid grid-cols-2 gap-3 text-center">
-              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest text-center italic">Cancel</button>
-              <button onClick={handleReschedule} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl tracking-widest text-center active:scale-95 transition-all italic disabled:opacity-50">Send Request</button>
+              <button onClick={() => setReschedulingBooking(null)} className="py-5 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest italic hover:bg-slate-200 transition-colors">Cancel</button>
+              <button onClick={handleReschedule} disabled={!newTimeInput} className="py-5 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl tracking-widest italic hover:bg-blue-700 transition-all disabled:opacity-30">Send Request</button>
             </div>
           </div>
         </div>
