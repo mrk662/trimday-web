@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { 
   Camera, CheckCircle, Loader2, Lock, 
   MapPin, X, Maximize2, Minimize2, Eye, EyeOff, Info, Globe, ShieldCheck,
-  LayoutDashboard, Users, Bell, BarChart3, Scissors
+  LayoutDashboard, Users, Bell, BarChart3, Scissors, Mail
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -12,7 +12,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-// 🔥 UPDATED: Added Price IDs for both tiers. (Make sure these match your .env.local file!)
 const STRIPE_SOLO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_SOLO; 
 const STRIPE_PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO; 
 
@@ -45,9 +44,10 @@ export default function JoinPlatform() {
   const [uploading, setUploading] = useState(false);
 
   // Form State
-  const [selectedPlan, setSelectedPlan] = useState("solo"); // 🔥 NEW: Track selected plan
+  const [selectedPlan, setSelectedPlan] = useState("solo"); 
   const [shopName, setShopName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [email, setEmail] = useState(""); // 🔥 NEW: Email State
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -61,12 +61,14 @@ export default function JoinPlatform() {
   // --- VALIDATION ---
   const isNameValid = shopName.trim().length >= 3;
   const isPhoneValid = whatsappNumber.length === 11 && whatsappNumber.startsWith("0");
+  const isEmailValid = email.includes("@") && email.includes("."); // 🔥 NEW: Email Validation
   const isPasswordValid = password.length >= 8;
   const passwordsMatch = password === confirmPassword && password.length > 0;
   const isAddressValid = address.trim().length >= 5;
   const isPostcodeValid = ukPostcodeRegex.test(postcode.trim());
 
-  const canGoStep2 = isNameValid && isPhoneValid && isPasswordValid && passwordsMatch;
+  // 🔥 UPDATED: Added isEmailValid to Step 1
+  const canGoStep2 = isNameValid && isPhoneValid && isEmailValid && isPasswordValid && passwordsMatch;
   const canGoStep3 = isAddressValid && isPostcodeValid && agreedToTerms;
 
   const handleFileUpload = async (event) => {
@@ -97,7 +99,6 @@ export default function JoinPlatform() {
     const shopId = crypto.randomUUID();
 
     try {
-      // 1. Geo-location check
       const geoResponse = await fetch(`https://api.postcodes.io/postcodes/${postcode.trim().replace(/\s/g, "")}`);
       const geoData = await geoResponse.json();
       
@@ -108,12 +109,13 @@ export default function JoinPlatform() {
         lng = geoData.result.longitude;
       }
 
-      // 2. Create the Shop Record (Includes the tier they picked)
+      // 🔥 Send email to Supabase along with shop data
       const { error } = await supabase.from("shops").insert([{
         id: shopId,
         name: shopName.trim(),
         slug: `${slugify(shopName)}-${shopId.slice(0, 5)}`,
         whatsapp_number: whatsappNumber,
+        email: email.trim().toLowerCase(), 
         password_hash: password,
         address: address.trim(),
         postcode: postcode.trim().toUpperCase(),
@@ -125,13 +127,20 @@ export default function JoinPlatform() {
         is_open: true,
         is_active: false,
         subscription_status: "pending",
-        subscription_tier: selectedPlan, // 🔥 Save which plan they chose
+        subscription_tier: selectedPlan,
         created_at: new Date().toISOString()
       }]);
 
-      if (error) throw error;
+      // 🔥 The actual duplicate number fix
+      if (error) {
+        if (error.code === '23505') {
+          alert("This mobile number is already registered to an account. Please log in.");
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
-      // 3. Trigger Stripe Checkout API with the correct Price ID based on selection
       const targetPriceId = selectedPlan === 'pro' ? STRIPE_PRO_PRICE_ID : STRIPE_SOLO_PRICE_ID;
 
       const res = await fetch('/api/stripe/checkout', {
@@ -159,7 +168,6 @@ export default function JoinPlatform() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-12 px-4 font-sans text-slate-900 text-left">
       
-      {/* --- SALES PITCH / EXAMPLES SECTION --- */}
       <div className="max-w-xl w-full text-center mb-12">
         <div className="bg-black text-white p-3 rounded-2xl inline-flex mb-6 shadow-xl rotate-3">
           <Scissors size={24} />
@@ -171,7 +179,6 @@ export default function JoinPlatform() {
           Automate your booking flow in 60 seconds.
         </p>
 
-        {/* FEATURE EXAMPLES GRID */}
         <div className="grid grid-cols-2 gap-3 text-left mb-8">
           <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
             <LayoutDashboard className="text-blue-500 mb-2" size={20} />
@@ -208,7 +215,6 @@ export default function JoinPlatform() {
           <div className="space-y-6">
             <h2 className="text-4xl font-black tracking-tight italic uppercase">The Basics.</h2>
 
-            {/* 🔥 NEW: SELECT PLAN BEFORE CONTINUING */}
             <div className="grid grid-cols-2 gap-3 mb-6">
                <button 
                   onClick={() => setSelectedPlan('solo')}
@@ -234,15 +240,28 @@ export default function JoinPlatform() {
                 onChange={(e) => setShopName(e.target.value)} 
                 className="w-full p-5 rounded-2xl border-2 bg-slate-50 outline-none transition-all text-lg font-semibold border-slate-100 focus:border-blue-500" 
               />
+              
               <div className="space-y-1">
                 <input 
                   type="tel" 
                   placeholder="Login / Contact Number (07...)" 
                   value={whatsappNumber} 
                   onChange={(e) => setWhatsappNumber(formatUKNumber(e.target.value))} 
-                  className={`w-full p-5 rounded-2xl border-2 bg-slate-50 outline-none transition-all text-lg font-semibold ${whatsappNumber.length > 0 && !isPhoneValid ? 'border-red-200' : 'border-slate-100'}`} 
+                  className={`w-full p-5 rounded-2xl border-2 bg-slate-50 outline-none transition-all text-lg font-semibold ${whatsappNumber.length > 0 && !isPhoneValid ? 'border-red-200' : 'border-slate-100 focus:border-blue-500'}`} 
                 />
                 {!isPhoneValid && whatsappNumber.length > 0 && <p className="text-red-500 text-xs font-bold ml-2 uppercase">Must be an 11-digit UK number</p>}
+              </div>
+
+              {/* 🔥 NEW ADMIN EMAIL FIELD */}
+              <div className="relative">
+                <Mail className="absolute left-5 top-6 text-slate-400" size={20} />
+                <input 
+                  type="email" 
+                  placeholder="Admin Email (For Password Resets)" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  className={`w-full p-5 pl-14 rounded-2xl border-2 bg-slate-50 outline-none transition-all text-lg font-semibold ${email.length > 0 && !isEmailValid ? 'border-red-200' : 'border-slate-100 focus:border-blue-500'}`} 
+                />
               </div>
 
               <div className="relative">

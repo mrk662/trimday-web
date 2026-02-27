@@ -4,7 +4,7 @@ import {
   Calendar, Clock, Power, Loader2, Maximize2, X, Plus,
   CheckCircle, XCircle, Scissors, Volume2, VolumeX, Activity, 
   Phone, LogOut, ChevronDown, RefreshCcw, Share, MoreVertical, QrCode,
-  Download 
+  Download, BellRing
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import OneSignal from 'react-onesignal';
@@ -30,8 +30,13 @@ function PwaPrompt() {
   useEffect(() => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) setIsInstalled(true);
+    
     const ua = navigator.userAgent.toLowerCase();
-    if (ua.indexOf("android") > -1) setDevice("android");
+    if (ua.indexOf("android") > -1) {
+      setDevice("android");
+    } else if (!/iphone|ipad|ipod/.test(ua)) {
+      setDevice("desktop");
+    }
   }, []);
 
   if (!show || isInstalled) return null;
@@ -61,7 +66,7 @@ function PwaPrompt() {
                 <p className="text-sm font-bold text-white">2. Scroll down and tap <span className="font-black underline">Add to Home Screen</span>.</p>
               </div>
             </>
-          ) : (
+          ) : device === "android" ? (
             <>
               <div className="flex items-center gap-3">
                 <div className="bg-white/10 p-2.5 rounded-xl"><MoreVertical size={18} /></div>
@@ -72,6 +77,11 @@ function PwaPrompt() {
                 <p className="text-sm font-bold text-white">2. Tap <span className="font-black underline">Install app</span> or Add to Home Screen.</p>
               </div>
             </>
+          ) : (
+             <div className="flex items-center gap-3">
+               <div className="bg-white/10 p-2.5 rounded-xl"><Maximize2 size={18} /></div>
+               <p className="text-sm font-bold text-white">Look in your address bar up top and click the <span className="font-black underline">Install Icon</span> to get the app.</p>
+             </div>
           )}
         </div>
       </div>
@@ -85,7 +95,7 @@ export default function StaffGoldenDashboard() {
   const [myBookings, setMyBookings] = useState([]);
   const [broadcast, setBroadcast] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(false); // 🔥 Default OFF
+  const [soundEnabled, setSoundEnabled] = useState(false); 
   const [showWalkInMenu, setShowWalkInMenu] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
@@ -340,54 +350,45 @@ export default function StaffGoldenDashboard() {
     poster.width = 1200;
     poster.height = 1600;
 
-    // 1. Dark Premium Background (Slate-900)
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, poster.width, poster.height);
 
-    // 2. Punchy Header (White)
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffffff"; 
     ctx.font = "900 45px sans-serif";
     ctx.fillText("BOOK YOUR TRIM IN SECONDS", poster.width / 2, 160);
 
-    // 3. Shop Name (TrimDay Blue)
-    ctx.fillStyle = "#3b82f6"; // Brighter blue for dark background
+    ctx.fillStyle = "#3b82f6"; 
     ctx.font = "italic 900 100px sans-serif";
     const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
     ctx.fillText(displayName, poster.width / 2, 280);
 
-    // 4. White Background Box for the QR Code (so it scans perfectly)
     const qrSize = 750;
     const padding = 40;
     const boxSize = qrSize + (padding * 2);
     const xBox = (poster.width - boxSize) / 2;
     const yBox = 380;
     
-    // Draw rounded white box
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); // 40px border radius
+    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); 
     ctx.fill();
 
-    // 5. Draw QR Code inside the box
     const xPos = (poster.width - qrSize) / 2;
     const yPos = 380 + padding;
     ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
 
-    // 6. Minimalist Footer Instructions
-    ctx.fillStyle = "#cbd5e1"; // Slate-300
+    ctx.fillStyle = "#cbd5e1"; 
     ctx.font = "bold 40px sans-serif";
     ctx.fillText("Point your camera at the code", poster.width / 2, 1330);
     
-    // 7. Divider and Branding
-    ctx.fillStyle = "#334155"; // Slate-700
+    ctx.fillStyle = "#334155"; 
     ctx.fillRect(400, 1420, 400, 3); 
 
-    ctx.fillStyle = "#3b82f6"; // Blue
+    ctx.fillStyle = "#3b82f6";
     ctx.font = "900 35px sans-serif";
     ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
 
-    // 8. Trigger Download
     const pngFile = poster.toDataURL("image/png");
     const downloadLink = document.createElement("a");
     downloadLink.download = `${filename}.png`;
@@ -402,38 +403,29 @@ export default function StaffGoldenDashboard() {
       <div className="relative w-full h-48 bg-slate-900 overflow-hidden shadow-inner">
         {shop?.shop_photo_url && <img src={shop.shop_photo_url} className="w-full h-full object-cover opacity-40 grayscale-[0.5]" alt="Shop" />}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent" />
-        
-        <div className="absolute top-6 right-6 z-20 flex gap-3">
-          {!pushEnabled && (
-            <button onClick={handleEnablePush} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl animate-pulse">
-              <Activity size={20} />
-            </button>
-          )}
-          <button onClick={() => setShowQrModal(true)} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-blue-600 transition-all shadow-2xl"><QrCode size={20} /></button>
-          <button onClick={handleLogout} className="bg-white/10 backdrop-blur-md p-4 rounded-3xl text-white hover:bg-red-500 transition-all shadow-2xl"><LogOut size={20} /></button>
-        </div>
       </div>
 
       <div className="max-w-xl mx-auto px-6 -mt-16 relative z-20">
         <PwaPrompt />
 
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex justify-between items-center mb-10">
-          <div className="flex items-center gap-4">
-            <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-lg transition-all ${
-              barber?.is_available_today ? 'bg-green-500 shadow-green-200' : 'bg-slate-400 shadow-slate-200'
-            }`}>
-              {barber?.name?.charAt(0)}
+        {/* 🔥 FIX: Clean white header with perfectly aligned icons below */}
+        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-slate-100 flex flex-col mb-10 gap-6">
+          <div className="flex justify-between items-center w-full">
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-lg transition-all ${
+                barber?.is_available_today ? 'bg-green-500 shadow-green-200' : 'bg-slate-400 shadow-slate-200'
+              }`}>
+                {barber?.name?.charAt(0)}
+              </div>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 leading-none uppercase italic">
+                  {barber?.name}
+                  <span className={`w-2 h-2 rounded-full animate-pulse ${barber?.is_available_today ? 'bg-green-500' : 'bg-red-500'}`} />
+                </h1>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{shop?.name || 'My Shop'}</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 leading-none uppercase italic">
-                {barber?.name}
-                <span className={`w-2 h-2 rounded-full animate-pulse ${barber?.is_available_today ? 'bg-green-500' : 'bg-red-500'}`} />
-              </h1>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{shop?.name || 'My Shop'}</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
+            
             <button 
               onClick={toggleDuty} 
               className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[10px] uppercase transition-all active:scale-95 ${
@@ -445,9 +437,41 @@ export default function StaffGoldenDashboard() {
               <Power size={14} />
               {barber?.is_available_today ? "Online" : "Offline"}
             </button>
-            <button onClick={toggleSound} className={`p-4 rounded-2xl transition-all ${soundEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
-              {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-            </button>
+          </div>
+
+          <div className="w-full h-px bg-slate-50"></div>
+
+          {/* 🔥 FIX: Properly aligned icon row with text labels */}
+          <div className="flex items-center justify-around w-full px-2 mt-2">
+            {!pushEnabled && (
+              <div className="flex flex-col items-center gap-2 relative">
+                <button onClick={handleEnablePush} className="p-5 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse z-10" title="Enable Alerts">
+                  <BellRing size={24} />
+                </button>
+                <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Alerts</span>
+              </div>
+            )}
+            
+            <div className="flex flex-col items-center gap-2 relative">
+              <button onClick={toggleSound} className={`p-5 rounded-2xl transition-all shadow-sm active:scale-95 z-10 ${soundEnabled ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>
+                {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
+              </button>
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Audio</span>
+            </div>
+
+            <div className="flex flex-col items-center gap-2 relative">
+              <button onClick={() => setShowQrModal(true)} className="p-5 bg-slate-100 text-slate-900 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 z-10">
+                <QrCode size={24} />
+              </button>
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Poster</span>
+            </div>
+
+            <div className="flex flex-col items-center gap-2 relative">
+              <button onClick={handleLogout} className="p-5 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95 z-10">
+                <LogOut size={24} />
+              </button>
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Log Out</span>
+            </div>
           </div>
         </div>
 

@@ -6,7 +6,7 @@ import {
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
   CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock,
-  AlertTriangle, TrendingUp, Eye, EyeOff 
+  AlertTriangle, TrendingUp, Eye, EyeOff, Music
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -57,8 +57,14 @@ function PwaPrompt() {
   useEffect(() => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     if (isStandalone) setIsInstalled(true);
+    
+    // 🔥 NEW: Added desktop detection
     const ua = navigator.userAgent.toLowerCase();
-    if (ua.indexOf("android") > -1) setDevice("android");
+    if (ua.indexOf("android") > -1) {
+      setDevice("android");
+    } else if (!/iphone|ipad|ipod/.test(ua)) {
+      setDevice("desktop");
+    }
   }, []);
 
   if (!show || isInstalled) return null;
@@ -88,7 +94,7 @@ function PwaPrompt() {
                 <p className="text-sm font-bold text-white">2. Scroll down and tap <span className="font-black underline">Add to Home Screen</span>.</p>
               </div>
             </>
-          ) : (
+          ) : device === "android" ? (
             <>
               <div className="flex items-center gap-3">
                 <div className="bg-white/10 p-2.5 rounded-xl"><MoreVertical size={18} /></div>
@@ -99,6 +105,11 @@ function PwaPrompt() {
                 <p className="text-sm font-bold text-white">2. Tap <span className="font-black underline">Install app</span> or Add to Home Screen.</p>
               </div>
             </>
+          ) : (
+             <div className="flex items-center gap-3">
+               <div className="bg-white/10 p-2.5 rounded-xl"><Maximize2 size={18} /></div>
+               <p className="text-sm font-bold text-white">Look in your address bar up top and click the <span className="font-black underline">Install Icon</span> to get the app.</p>
+             </div>
           )}
         </div>
       </div>
@@ -177,8 +188,11 @@ export default function BarberDashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
+  
+  // 🔥 RESTORED SOUND MENU STATE
   const [selectedSound, setSelectedSound] = useState('ping1');
   const [showSoundSettings, setShowSoundSettings] = useState(false);
+  
   const [pushEnabled, setPushEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("https://trimday.co.uk");
 
@@ -198,6 +212,7 @@ export default function BarberDashboard() {
   const [showSetupNudge, setShowSetupNudge] = useState(true);
 
   const soundEnabledRef = useRef(soundEnabled);
+  const selectedSoundRef = useRef(selectedSound);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -208,6 +223,10 @@ export default function BarberDashboard() {
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  useEffect(() => {
+    selectedSoundRef.current = selectedSound;
+  }, [selectedSound]);
 
   useEffect(() => {
     const initOneSignal = async () => {
@@ -258,6 +277,7 @@ export default function BarberDashboard() {
           if (soundEnabledRef.current) {
             const audioEl = document.getElementById("bookingAlert");
             if (audioEl) {
+              audioEl.src = `/${selectedSoundRef.current}.mp3`;
               audioEl.volume = 1;
               audioEl.currentTime = 0;
               audioEl.play().catch(e => console.error("Audio blocked:", e));
@@ -336,6 +356,14 @@ export default function BarberDashboard() {
     setAllTodayBookings(data || []);
     setPendingBookings(data?.filter(b => ["pending", "active", "unverified"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
+  };
+
+  const testAudio = (soundName) => {
+    const audioEl = document.getElementById("bookingAlert");
+    if (audioEl) {
+      audioEl.src = `/${soundName}.mp3`;
+      audioEl.play().catch(() => {});
+    }
   };
 
   const toggleSound = () => {
@@ -511,7 +539,6 @@ export default function BarberDashboard() {
     } catch (error) { console.error("Push failed", error); }
   };
 
-  // 🔥 V2 PREMIUM DARK MODE POSTER
   const downloadQR = (canvasId, filename) => {
     const qrCanvas = document.getElementById(canvasId);
     if (!qrCanvas) return alert("QR not ready yet.");
@@ -521,54 +548,45 @@ export default function BarberDashboard() {
     poster.width = 1200;
     poster.height = 1600;
 
-    // 1. Dark Premium Background (Slate-900)
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, poster.width, poster.height);
 
-    // 2. Punchy Header (White)
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffffff"; 
     ctx.font = "900 45px sans-serif";
     ctx.fillText("BOOK YOUR TRIM IN SECONDS", poster.width / 2, 160);
 
-    // 3. Shop Name (TrimDay Blue)
-    ctx.fillStyle = "#3b82f6"; // Brighter blue for dark background
+    ctx.fillStyle = "#3b82f6"; 
     ctx.font = "italic 900 100px sans-serif";
     const displayName = shop?.name?.toUpperCase() || "TRIMDAY BARBER";
     ctx.fillText(displayName, poster.width / 2, 280);
 
-    // 4. White Background Box for the QR Code (so it scans perfectly)
     const qrSize = 750;
     const padding = 40;
     const boxSize = qrSize + (padding * 2);
     const xBox = (poster.width - boxSize) / 2;
     const yBox = 380;
     
-    // Draw rounded white box
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); // 40px border radius
+    ctx.roundRect(xBox, yBox, boxSize, boxSize, 40); 
     ctx.fill();
 
-    // 5. Draw QR Code inside the box
     const xPos = (poster.width - qrSize) / 2;
     const yPos = 380 + padding;
     ctx.drawImage(qrCanvas, xPos, yPos, qrSize, qrSize);
 
-    // 6. Minimalist Footer Instructions
-    ctx.fillStyle = "#cbd5e1"; // Slate-300
+    ctx.fillStyle = "#cbd5e1"; 
     ctx.font = "bold 40px sans-serif";
     ctx.fillText("Point your camera at the code", poster.width / 2, 1330);
     
-    // 7. Divider and Branding
-    ctx.fillStyle = "#334155"; // Slate-700
+    ctx.fillStyle = "#334155"; 
     ctx.fillRect(400, 1420, 400, 3); 
 
-    ctx.fillStyle = "#3b82f6"; // Blue
+    ctx.fillStyle = "#3b82f6";
     ctx.font = "900 35px sans-serif";
     ctx.fillText("trimday.co.uk", poster.width / 2, 1500);
 
-    // 8. Trigger Download
     const pngFile = poster.toDataURL("image/png");
     const downloadLink = document.createElement("a");
     downloadLink.download = `${filename}.png`;
@@ -622,18 +640,47 @@ export default function BarberDashboard() {
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+          {/* 🔥 PERFECTLY ALIGNED ICON BAR */}
+          <div className="flex items-center justify-center gap-3 w-full md:w-auto mt-4 md:mt-0 relative">
             
             {!pushEnabled && (
-              <button onClick={handleEnablePush} className="p-5 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse">
+              <button onClick={handleEnablePush} className="p-5 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg animate-pulse" title="Enable Alerts">
                 <BellRing size={24} />
               </button>
             )}
 
-            <button onClick={toggleSound} className={`p-5 rounded-2xl transition-all shadow-sm active:scale-95 ${soundEnabled ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>
-               {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-            </button>
+            {/* SOUND TOGGLE & MENU */}
+            <div className="relative">
+              <button onClick={() => {
+                if (!soundEnabled) {
+                  toggleSound(); 
+                } else {
+                  setShowSoundSettings(!showSoundSettings);
+                }
+              }} className={`p-5 rounded-2xl transition-all shadow-sm active:scale-95 ${soundEnabled ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-400'}`}>
+                 {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
+              </button>
+              
+              {showSoundSettings && soundEnabled && (
+                <div className="absolute right-0 top-full mt-2 bg-white rounded-3xl shadow-2xl p-3 z-50 w-48 border border-slate-100 animate-in slide-in-from-top-2">
+                  <div className="flex justify-between items-center px-2 mb-2">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Select Ping</p>
+                    <button onClick={() => { setSoundEnabled(false); setShowSoundSettings(false); }} className="text-[10px] font-bold text-red-500 hover:underline">Mute</button>
+                  </div>
+                  {['ping1', 'ping2', 'ping3'].map(snd => (
+                    <button 
+                      key={snd}
+                      onClick={() => { setSelectedSound(snd); testAudio(snd); setShowSoundSettings(false); }}
+                      className={`w-full text-left px-4 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 transition-all ${selectedSound === snd ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-50 text-slate-600'}`}
+                    >
+                      <Music size={14} /> {snd}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             
+            {/* SETTINGS GEAR WITH FLOATING TEXT */}
             <div className="relative">
               {showSetupNudge && (
                 <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 bg-blue-600 text-white p-3 rounded-2xl shadow-2xl z-50 animate-bounce">
@@ -653,11 +700,14 @@ export default function BarberDashboard() {
 
               <button 
                 onClick={() => { setIsEditingSettings(true); setShowSetupNudge(false); }} 
-                className="p-5 bg-slate-100 text-slate-900 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 relative"
+                className="p-5 bg-slate-100 text-slate-900 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 relative z-10"
               >
                 {showSetupNudge && <span className="absolute inset-0 rounded-2xl bg-blue-500/30 animate-ping"></span>}
                 <Settings size={24} className="relative z-10" />
               </button>
+              
+              {/* Absolute positioned text so it doesn't break alignment */}
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-slate-400 tracking-widest italic whitespace-nowrap">Shop Setup</span>
             </div>
           </div>
 
@@ -769,7 +819,7 @@ export default function BarberDashboard() {
               </div>
             </section>
 
-            {/* MARKETING SECTION */}
+            {/* MARKETING SECTION FOR PRINTABLE POSTER */}
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter"><Share2 className="text-blue-600" /> Marketing</h2>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Grow your shop</p>
