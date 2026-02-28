@@ -6,7 +6,7 @@ import {
   Scissors, Save, Plus, Trash2, Settings, Volume2, VolumeX, Activity,
   Maximize2, X, Bell, ChevronDown, UserPlus, RefreshCcw, BellRing,
   CreditCard, Share2, Download, MessageCircle, Share, MoreVertical, Lock,
-  AlertTriangle, TrendingUp, Eye, EyeOff, Music, MailWarning
+  AlertTriangle, TrendingUp, Eye, EyeOff, Music, MailWarning, Image as ImageIcon
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import Link from 'next/link';
@@ -186,9 +186,10 @@ export default function BarberDashboard() {
   const [allTodayBookings, setAllTodayBookings] = useState([]);
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // 🔥 Added for photo uploads
   const [soundEnabled, setSoundEnabled] = useState(false); 
   const [showServiceMenu, setShowServiceMenu] = useState(false); 
-  const [isEditingMenu, setIsEditingMenu] = useState(false);     
+  const [isEditingMenu, setIsEditingMenu] = useState(false);      
   const [menuItems, setMenuItems] = useState([]);
   const [reschedulingBooking, setReschedulingBooking] = useState(null);
   const [newTimeInput, setNewTimeInput] = useState("");
@@ -253,11 +254,9 @@ export default function BarberDashboard() {
     
     fetchInitialData(shopId);
 
-    // 🔥 UPDATED REALTIME MASTER LISTENER: Invisible logic applied
     const channel = supabase.channel('dashboard-realtime-master')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings' }, (payload) => {
         if (payload.new && String(payload.new.shop_id) === String(shopId)) {
-          // UPDATE: Ignore live unverified inserts entirely
           if (payload.new.status === 'unverified') return;
           
           if (soundEnabledRef.current) {
@@ -274,7 +273,6 @@ export default function BarberDashboard() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, (payload) => {
           if (payload.new && String(payload.new.shop_id) === String(shopId)) {
-            // UPDATE: Trigger sound ONLY when flipping from unverified -> pending
             if (payload.old.status === 'unverified' && payload.new.status === 'pending') {
               if (soundEnabledRef.current) {
                 const audioEl = document.getElementById("bookingAlert");
@@ -349,12 +347,82 @@ export default function BarberDashboard() {
       .eq("shop_id", id) 
       .eq('booking_date', today)
       .neq("status", "cancelled") 
-      .neq("status", "unverified") // 🔥 UPDATE: Hide unverified from the schedule entirely
+      .neq("status", "unverified") 
       .order("created_at", { ascending: false });
 
     setAllTodayBookings(data || []);
     setPendingBookings(data?.filter(b => ["pending", "active"].includes(b.status)) || []);
     setConfirmedSchedule(data?.filter(b => ["confirmed", "rescheduled"].includes(b.status)) || []);
+  };
+
+  // --- 🔥 NEW PORTFOLIO LOGIC (Surgically Inserted) ---
+  const handlePortfolioUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if ((shop?.portfolio_photos || []).length >= 4) {
+      alert("Limit reached! Delete a photo to upload a new one.");
+      return;
+    }
+
+    const resizeImage = (file) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (e) => {
+          const img = new Image();
+          img.src = e.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1080;
+            const scaleSize = MAX_WIDTH / img.width;
+            canvas.width = MAX_WIDTH;
+            canvas.height = img.height * scaleSize;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+          };
+        };
+      });
+    };
+
+    try {
+      setIsSubmitting(true);
+      const compressedBlob = await resizeImage(file);
+      const fileName = `portfolio/${shop.id}/${Date.now()}.jpg`;
+
+      const { data, error } = await supabase.storage
+        .from('portfolio_photos')
+        .upload(fileName, compressedBlob);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage.from('portfolio_photos').getPublicUrl(fileName);
+      const updatedPhotos = [...(shop.portfolio_photos || []), publicUrl];
+
+      await supabase.from('shops').update({ portfolio_photos: updatedPhotos }).eq('id', shop.id);
+      
+      fetchInitialData(shop.id); 
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const deletePhoto = async (photoUrl) => {
+    if (!window.confirm("Delete this photo?")) return;
+    try {
+      const updatedPhotos = shop.portfolio_photos.filter(p => p !== photoUrl);
+      await supabase.from('shops').update({ portfolio_photos: updatedPhotos }).eq('id', shop.id);
+
+      const pathMatch = photoUrl.split('/portfolio_photos/')[1];
+      if (pathMatch) await supabase.storage.from('portfolio_photos').remove([pathMatch]);
+
+      fetchInitialData(shop.id);
+    } catch (err) {
+      alert("Delete failed");
+    }
   };
 
   const testAudio = (soundName) => {
@@ -798,6 +866,42 @@ export default function BarberDashboard() {
           </div>
 
           <div className="space-y-8 w-full">
+            {/* 🔥 NEW PORTFOLIO MANAGER SECTION (Surgically Added) */}
+            <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
+              <h2 className="text-xl font-black mb-1 flex items-center gap-2 uppercase italic tracking-tighter text-slate-900">
+                <ImageIcon className="text-blue-600" /> Portfolio (Max 4)
+              </h2>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 italic ml-1">Showcase your best work</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[0, 1, 2, 3].map((index) => {
+                  const photo = shop?.portfolio_photos?.[index];
+                  return (
+                    <div key={index} className="aspect-square rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden group">
+                      {photo ? (
+                        <>
+                          <img src={photo} className="w-full h-full object-cover" alt="Portfolio" />
+                          <button 
+                            onClick={() => deletePhoto(photo)}
+                            className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-xl opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <label className="cursor-pointer flex flex-col items-center gap-1 text-slate-300 hover:text-blue-500 transition-colors">
+                          {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (
+                            <><Plus size={24} /><span className="text-[8px] font-black uppercase tracking-widest">Upload</span></>
+                          )}
+                          <input type="file" accept="image/*" onChange={handlePortfolioUpload} className="hidden" disabled={isSubmitting} />
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
             <section className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-fit">
               <h2 className="text-xl font-black mb-8 flex items-center gap-2 uppercase italic tracking-tighter text-slate-900"><User className="text-blue-600" /> Staff on Duty</h2>
               <div className="space-y-4">

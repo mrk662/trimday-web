@@ -85,6 +85,9 @@ export async function POST(req) {
             </html>
           `
         });
+
+        // 🔥 HARD LOCK: Return here so the push notification code below is NEVER triggered for unverified users
+        return NextResponse.json({ success: true, message: "Verification email sent, push skipped." });
       } 
       
       // B. The user is a VERIFIED repeat customer. Ping the barber's phone immediately.
@@ -100,7 +103,7 @@ export async function POST(req) {
               body: JSON.stringify({
                 app_id: ONESIGNAL_APP_ID,
                 include_aliases: {
-                  external_id: [booking.shop_id]
+                  external_id: [String(booking.shop_id)]
                 },
                 target_channel: "push",
                 headings: { en: "🔔 New Booking Request!" },
@@ -119,6 +122,31 @@ export async function POST(req) {
 
     // 2. FINAL CONFIRMATION (Accept)
     else if (type === 'confirmed' || type === 'confirm') {
+      
+      // PUSH NOTIFICATION FOR CONFIRMATION
+      if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY) {
+        try {
+          await fetch('https://onesignal.com/api/v1/notifications', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Basic ${ONESIGNAL_REST_API_KEY}`
+            },
+            body: JSON.stringify({
+              app_id: ONESIGNAL_APP_ID,
+              include_aliases: {
+                external_id: [String(booking.shop_id)]
+              },
+              target_channel: "push",
+              headings: { en: "✂️ Booking Confirmed!" },
+              contents: { en: `Confirmed: ${booking.client_name} for ${booking.booking_time}` },
+              url: `${baseUrl}/dashboard`,
+              priority: 10
+            })
+          });
+        } catch (e) { console.error("Confirm push failed", e); }
+      }
+
       emailResponse = await resend.emails.send({
         from: fromAddress,
         to: toAddress, 
