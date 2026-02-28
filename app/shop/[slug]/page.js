@@ -2,7 +2,7 @@
 import React, { useEffect, useState, use } from "react";
 import { 
   MapPin, Globe, MessageSquare, Calendar, Loader2, 
-  Clock, ChevronRight, Info, ChevronDown, Phone // Made sure Phone is here
+  Clock, ChevronRight, Info, ChevronDown, Phone 
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -202,9 +202,65 @@ export default function PublicShopPage({ params }) {
             )}
           </div>
         </div>
+
+        {/* 🔥 NEW 5. PORTFOLIO GALLERY (LIVE CONDITIONAL) */}
+        {shop.portfolio_photos && shop.portfolio_photos.length > 0 && (
+          <section className="mb-12">
+            <h3 className="font-black text-xl mb-6 text-left uppercase italic tracking-tighter">Portfolio</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {shop.portfolio_photos.slice(0, 4).map((url, i) => (
+                <div key={i} className="aspect-square rounded-3xl overflow-hidden bg-slate-100">
+                  <img src={url} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500 cursor-pointer" alt="Work Preview" />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* 🔥 NEW 6. LOCATION & HOURS MAP */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-slate-50 p-8 rounded-[3rem] border border-slate-100 mb-10">
+          <div>
+            <h3 className="font-black text-xl mb-2 flex items-center gap-2 uppercase italic tracking-tighter"><MapPin size={20} className="text-blue-600"/> Find Us</h3>
+            <p className="text-slate-500 font-bold text-sm mb-6">{shop.address}, {shop.postcode}</p>
+            
+            <div className="w-full h-48 rounded-[2rem] overflow-hidden shadow-inner bg-slate-200">
+              <iframe
+                width="100%"
+                height="100%"
+                frameBorder="0"
+                style={{ border: 0 }}
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(shop.address + " " + shop.postcode)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                allowFullScreen
+              ></iframe>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-black text-xl mb-6 flex items-center gap-2 uppercase italic tracking-tighter"><Clock size={20} className="text-blue-600"/> Opening Hours</h3>
+            <div className="space-y-3">
+              {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => {
+                const hours = shop.business_hours?.[day] || { is_closed: false, open: "09:00", close: "18:00" };
+                const today = new Date().toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase();
+                const isToday = today === day;
+
+                return (
+                  <div key={day} className={`flex justify-between items-center py-2 border-b border-slate-200/50 ${isToday ? 'bg-blue-100/50 p-2 rounded-xl -mx-2 px-2 border-transparent' : ''}`}>
+                    <span className={`font-black uppercase text-xs tracking-widest ${isToday ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {day} {isToday && "(Today)"}
+                    </span>
+                    <span className={`text-sm font-bold ${hours.is_closed ? 'text-red-400' : 'text-slate-900'}`}>
+                      {hours.is_closed ? 'Closed' : `${hours.open} - ${hours.close}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
       </div>
 
-      {/* 5. BOOKING MODAL */}
+      {/* 7. BOOKING MODAL */}
       {isBookingOpen && (
         <BookingModal 
           shopId={shop.id} 

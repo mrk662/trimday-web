@@ -127,6 +127,22 @@ export default function BookingModal({ shopId, service, services, onClose }) {
     return () => supabase.removeChannel(channel);
   }, [shopId]);
 
+  // Pre-fill form if user is already logged in
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setBooking(prev => ({
+          ...prev,
+          customerEmail: session.user.email,
+          customerName: session.user.user_metadata?.full_name || prev.customerName,
+          customerPhone: session.user.user_metadata?.phone || prev.customerPhone
+        }));
+      }
+    };
+    checkUser();
+  }, []);
+
   const [tick] = useState(Date.now());
 
   const slots = useMemo(() => {
@@ -153,49 +169,74 @@ export default function BookingModal({ shopId, service, services, onClose }) {
 
     setIsSubmitting(true);
 
-    const { data: previousBookings } = await supabase
-      .from("bookings")
-      .select("id")
-      .eq("client_email", booking.customerEmail.trim().toLowerCase())
-      .in("status", ["confirmed", "completed"]) 
-      .limit(1);
+    try {
+      // 1. 🔥 Check if browser is actively logged in
+      const { data: { session } } = await supabase.auth.getSession();
+      let isSafe = !!session?.user;
 
-    const isSafe = previousBookings && previousBookings.length > 0;
-    setWasPreVerified(isSafe);
-
-    const initialStatus = isSafe ? "pending" : "unverified";
-    
-    const { data: newBooking, error } = await supabase.from("bookings").insert([
-      {
-        shop_id: shopId,
-        client_name: booking.customerName.trim(),
-        client_email: booking.customerEmail.trim().toLowerCase(),
-        client_phone: booking.customerPhone,
-        barber_id: booking.barber?.id || null,
-        barber_name: booking.barber?.name || "Any Barber",
-        service_name: booking.service.name,
-        booking_date: booking.slotDate.toISOString().split('T')[0],
-        booking_time: formatTime(booking.slotDate),
-        status: initialStatus,
-      },
-    ]).select().single();
-
-    if (!error) {
+      // 2. 🔥 HYBRID CHECK: If not logged in, check if this email has ANY past verified bookings
       if (!isSafe) {
-        await fetch('/api/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            booking: newBooking, 
-            type: 'verify_email'
-          })
+        const { data: pastBookings } = await supabase
+          .from("bookings")
+          .select("id")
+          .eq("client_email", booking.customerEmail.trim().toLowerCase())
+          .neq("status", "unverified") // Any status EXCEPT 'unverified' proves they are real!
+          .limit(1);
+
+        if (pastBookings && pastBookings.length > 0) {
+          isSafe = true; // Email recognized as a verified returning customer
+        }
+      }
+
+      setWasPreVerified(isSafe);
+      const initialStatus = isSafe ? 'pending' : 'unverified';
+
+      // 3. If totally new user, trigger Supabase Auth Signup silently
+      if (!isSafe) {
+        await supabase.auth.signUp({
+          email: booking.customerEmail.trim().toLowerCase(),
+          password: Math.random().toString(36).slice(-12), 
+          options: {
+            emailRedirectTo: `${window.location.origin}/verify-booking?email=${booking.customerEmail.trim().toLowerCase()}`
+          }
         });
       }
+      
+      // 4. Insert the booking (Ghost or Active)
+      const { data: newBooking, error: bookingError } = await supabase.from("bookings").insert([
+        {
+          shop_id: shopId,
+          client_name: booking.customerName.trim(),
+          client_email: booking.customerEmail.trim().toLowerCase(),
+          client_phone: booking.customerPhone,
+          barber_id: booking.barber?.id || null,
+          barber_name: booking.barber?.name || "Any Barber",
+          service_name: booking.service.name,
+          booking_date: booking.slotDate.toISOString().split('T')[0],
+          booking_time: formatTime(booking.slotDate),
+          status: initialStatus,
+        },
+      ]).select().single();
+
+      if (bookingError) throw bookingError;
+
+      // 5. Trigger High-Priority Ping / Email
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          booking: newBooking, 
+          type: 'verify_email' 
+        })
+      });
+
       setStep(4);
-    } else {
-      alert(`Booking failed: ${error.message}`);
+
+    } catch (err) {
+      alert(`Booking failed: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (
@@ -343,7 +384,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
               }
             </p>
 
-            {/* 1. Explainer Box (Now First) */}
+            {/* 1. Explainer Box */}
             <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 mx-4 mb-4 text-center">
               <p className="text-xs font-bold text-slate-400 italic">
                 {wasPreVerified 
@@ -353,7 +394,7 @@ export default function BookingModal({ shopId, service, services, onClose }) {
               </p>
             </div>
 
-            {/* 2. Friendly Junk Folder Warning Box (Now Second) */}
+            {/* 2. Junk Folder Warning Box */}
             {!wasPreVerified && (
               <div className="border-2 border-amber-400 bg-amber-50 p-4 rounded-2xl shadow-sm mx-4 mb-10">
                 <p className="text-amber-600 font-black text-xs uppercase tracking-widest text-center italic flex items-center justify-center gap-2">
